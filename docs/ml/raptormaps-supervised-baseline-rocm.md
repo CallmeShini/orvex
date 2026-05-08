@@ -291,6 +291,43 @@ Interpretation:
 - For the current product demo, keep the default at `0.50` because Orvex needs credible triage behavior, not maximum anomaly sensitivity at any cost.
 - If the judging story emphasizes minority anomaly catch-rate, report the `1.00` recall-biased run separately and explain the false-positive trade-off.
 
+## Curated Manifest Evaluation
+
+After the sweep, the five artifacts were also checked against the 24 curated Orvex RaptorMaps samples tracked in `data/evaluation/raptormaps_manifest.jsonl`.
+
+This set is not a statistical benchmark. It is a small demo/control set with two samples per source class, useful for catching obvious demo-path failure modes.
+
+Command:
+
+```bash
+.venv/bin/python scripts/evaluate_raptormaps_classifier_samples.py \
+  --artifact data/models/raptormaps_classifier.pt
+```
+
+Observed VPS summary:
+
+| Artifact | Exact source-label matches | Anomaly-vs-healthy matches | Confident predictions |
+|---|---:|---:|---:|
+| `class_weight_power=0.00` | 6 / 24 | 16 / 24 | 9 / 24 |
+| `class_weight_power=0.25` | 6 / 24 | 10 / 24 | 12 / 24 |
+| `class_weight_power=0.50` | 6 / 24 | 15 / 24 | 15 / 24 |
+| `class_weight_power=0.75` | 9 / 24 | 20 / 24 | 10 / 24 |
+| `class_weight_power=1.00` | 9 / 24 | 21 / 24 | 10 / 24 |
+
+Interpretation:
+
+- the classifier is not reliable enough for fine source-label diagnosis;
+- recall-biased weights improve the anomaly-vs-healthy signal on this tiny curated set;
+- the balanced `0.50` artifact remains better on held-out validation accuracy, macro F1, weighted F1, and loss;
+- Orvex should present this baseline as a measured ROCm classifier and supporting triage signal, not as the primary product intelligence.
+
+Product decision:
+
+- keep `human_review_required=True` for every classifier result;
+- avoid showing source class as a definitive diagnosis;
+- use the classifier for AMD/ROCm evidence, reproducibility, and comparison against Qwen/expected outputs;
+- use Qwen2.5-VL and curated expected outputs for explanation and reviewer-facing report language until stronger model quality is proven.
+
 ## RaptorMaps Annotation Clarification
 
 RaptorMaps may appear as `annotations: 1` in generic validators because labels are stored in one global `module_metadata.json` file.

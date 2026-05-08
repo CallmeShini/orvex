@@ -1,0 +1,29 @@
+{
+  "name": "orvex-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
+    "@tailwindcss/postcss": "4.2.4",
+    "framer-motion": "12.38.0",
+    "next": "16.2.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "tailwindcss": "4.2.4",
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "postcss": "8.5.14"
+  }
+}

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, BinaryIO
+from uuid import uuid4
 
 from app.api.json_utils import JsonExtractionError, extract_json_object
 from app.api.local_vlm import LocalVLMClient, LocalVLMError
@@ -280,7 +282,11 @@ class OrvexAIService:
     @staticmethod
     def _save_upload(filename: str, file_obj: BinaryIO) -> Path:
         UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-        safe_name = Path(filename).name
+        source_name = Path(filename).name
+        safe_stem = re.sub(r"[^a-zA-Z0-9._-]+", "-", Path(source_name).stem).strip(".-")
+        safe_stem = safe_stem[:80] or "inspection-upload"
+        safe_suffix = Path(source_name).suffix.lower()[:12]
+        safe_name = f"{int(time.time())}-{uuid4().hex[:10]}-{safe_stem}{safe_suffix}"
         destination = UPLOADS_DIR / safe_name
         with destination.open("wb") as handle:
             handle.write(file_obj.read())

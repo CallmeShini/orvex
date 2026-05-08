@@ -16,6 +16,27 @@ from app.api.schemas import (
 )
 
 
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:8501",
+    "http://127.0.0.1:8501",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+)
+ALLOWED_IMAGE_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/tiff",
+}
+MAX_UPLOAD_BYTES = int(os.getenv("ORVEX_MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
+
+
+def cors_origins() -> list[str]:
+    configured = os.getenv("ORVEX_CORS_ORIGINS", "")
+    extra_origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return [*DEFAULT_CORS_ORIGINS, *extra_origins]
+
+
 app = FastAPI(
     title="Orvex API",
     description="AI-assisted visual triage API for photovoltaic inspection workflows.",
@@ -24,7 +45,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8501", "http://127.0.0.1:8501"],
+    allow_origins=cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,6 +85,9 @@ async def analyze(
     sample_name: str | None = Form(default=None),
     file: UploadFile | None = File(default=None),
 ) -> AnalyzeResponse:
+    if file is not None:
+        validate_upload(file)
+
     service = get_ai_service()
     try:
         result = service.analyze_image(
@@ -80,6 +104,27 @@ async def analyze(
         report_path=str(report_path),
         report_markdown=report_markdown,
     )
+
+
+def validate_upload(file: UploadFile) -> None:
+    if file.content_type not in ALLOWED_IMAGE_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                "Unsupported upload type. This API build accepts image inputs only: "
+                "JPEG, PNG, WebP, or TIFF. Video requires the planned inspection-job pipeline."
+            ),
+        )
+
+    current_position = file.file.tell()
+    file.file.seek(0, os.SEEK_END)
+    size = file.file.tell()
+    file.file.seek(current_position)
+    if size > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Upload exceeds the {MAX_UPLOAD_BYTES} byte limit.",
+        )
 
 
 @app.get("/reports/{inspection_id}", response_class=PlainTextResponse)

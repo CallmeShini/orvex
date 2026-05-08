@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f3f2ee;
+  --foreground: #171a16;
+  --muted: #687066;
+  --line: #deddd6;
+  --accent: #2f8f5b;
+  --accent-dark: #1d6f43;
+  --panel: #fbfaf6;
+  --rail: #111612;
+  --danger: #b73a24;
+  --warning: #9c6d1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    "Geist",
+    "Aptos",
+    "SF Pro Display",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  letter-spacing: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.font-mono {
+  font-family:
+    "Geist Mono",
+    "SF Mono",
+    "Cascadia Mono",
+    "Roboto Mono",
+    monospace;
+}
+
+.thermal-grid {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    radial-gradient(circle at 46% 51%, rgba(255, 228, 91, 0.96) 0 5%, rgba(229, 83, 42, 0.95) 8%, transparent 17%),
+    radial-gradient(circle at 34% 63%, rgba(255, 211, 80, 0.72) 0 4%, rgba(188, 51, 49, 0.55) 10%, transparent 21%),
+    linear-gradient(135deg, #21154c, #5a1466 34%, #991f5c 63%, #2a214d);
+  background-size:
+    132px 92px,
+    132px 92px,
+    cover,
+    cover,
+    cover;
+}
+
+.scanline {
+  background: linear-gradient(90deg, transparent, rgba(47, 143, 91, 0.18), transparent);
+  animation: scanline 2.8s ease-in-out infinite;
+}
+
+@keyframes scanline {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

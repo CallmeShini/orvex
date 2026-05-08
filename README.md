@@ -28,6 +28,12 @@ app/
     raptormaps_classifier.py
   ui/
     streamlit_app.py
+frontend/
+  app/
+    api/orvex/[...path]/route.ts
+    page.tsx
+  components/
+    orvex-workspace.tsx
 data/
   evaluation/
     raptormaps_manifest.jsonl
@@ -46,6 +52,8 @@ docs/
     dataset-registry.md
   ml/
     raptormaps-supervised-baseline-rocm.md
+  frontend/
+    nextjs-product-interface.md
   demo/
     submission-checklist.md
 scripts/
@@ -93,7 +101,24 @@ pip install -r requirements.txt
 AI_MODE=mock uvicorn app.api.main:app --host 127.0.0.1 --port 8000
 ```
 
-### Run UI
+### Run Next.js UI
+
+Open a second terminal:
+
+```bash
+cd frontend
+ORVEX_API_URL=http://127.0.0.1:8000 npm run dev -- --hostname 127.0.0.1 --port 3000
+```
+
+Then open:
+
+```txt
+http://127.0.0.1:3000
+```
+
+The Next.js app is the canonical presentation/product interface. It calls FastAPI through its own `/api/orvex/*` proxy route so browser clients do not need direct CORS access to the Python service.
+
+### Legacy Streamlit UI
 
 Open a second terminal:
 

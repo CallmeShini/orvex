@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from app.api.main import app
 from app.api.ai_service import AiServiceError, OrvexAIService
 from app.api.json_utils import JsonExtractionError, extract_json_object
 from app.api.schemas import InspectionResult
@@ -82,7 +84,8 @@ def test_local_vlm_mode_validates_model_json() -> None:
     assert result.model_name == "fake-qwen-vl"
     assert result.raw_model_output is not None
     assert fake_client.received_image_path is not None
-    assert fake_client.received_image_path.name == "uploaded-panel.jpg"
+    assert fake_client.received_image_path.name.endswith("-uploaded-panel.jpg")
+    assert fake_client.received_image_path.name != "uploaded-panel.jpg"
     assert "return only one valid JSON object" in fake_client.received_prompt
 
 
@@ -178,6 +181,17 @@ def test_official_demo_path_is_ordered_and_traceable() -> None:
     assert [sample["demo_order"] for sample in demo_samples] == [1, 2, 3, 4, 5, 6]
     assert all(sample["claim_boundary"] for sample in demo_samples)
     assert all(sample["expected_output_source"] for sample in demo_samples)
+
+
+def test_analyze_rejects_non_image_upload() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/analyze",
+        files={"file": ("inspection.txt", b"not an image", "text/plain")},
+    )
+
+    assert response.status_code == 415
+    assert "accepts image inputs only" in response.json()["detail"]
 
 
 def test_extract_json_from_markdown_block() -> None:

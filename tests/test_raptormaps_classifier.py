@@ -100,7 +100,8 @@ def test_prediction_to_result_routes_low_confidence_to_inconclusive() -> None:
 def test_classifier_mode_uses_injected_client() -> None:
     class FakeClassifierClient:
         def predict(self, image_path: Path) -> ClassifierPrediction:
-            assert image_path.name == "panel.jpg"
+            assert image_path.name.endswith("-panel.jpg")
+            assert image_path.name != "panel.jpg"
             return ClassifierPrediction(
                 label="No-Anomaly",
                 confidence=0.91,

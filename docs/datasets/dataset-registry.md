@@ -80,9 +80,9 @@ Useful focused runs:
 .venv/bin/python scripts/install_datasets.py --datasets raptormaps pv-panel-defect
 ```
 
-## Recommended Next Slice
+## Completed Intake Slice
 
-The next slice after installing datasets should be a dataset intake pack, not model training:
+The first intake slice was completed before supervised training:
 
 ```txt
 download/open RaptorMaps
@@ -94,4 +94,18 @@ download/open RaptorMaps
 -> connect selected samples to the existing FastAPI + Streamlit flow
 ```
 
-The first useful deliverable is not a trained model. It is a small, traceable, reviewable evaluation set that lets us test the Orvex contract and later compare mock output, VLM output, and any specialized model output.
+Tracked outputs:
+
+- `data/evaluation/raptormaps_manifest.jsonl`
+- `data/evaluation/expected_outputs/`
+- `docs/ml/raptormaps-supervised-baseline-rocm.md`
+
+The next dataset step is not to add unrelated medical or generic vision datasets. It is to use the existing RaptorMaps split and optional PV datasets to compare three paths:
+
+```txt
+expected contract outputs
+-> Qwen2.5-VL smoke outputs
+-> supervised ROCm classifier outputs
+```
+
+This keeps evaluation traceable and prevents the demo from mixing incompatible problem domains.

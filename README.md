@@ -202,3 +202,14 @@ AI_MODE=classifier \
 ORVEX_CLASSIFIER_ARTIFACT=data/models/raptormaps_classifier.pt \
   .venv/bin/python scripts/smoke_raptormaps_classifier.py --sample raptormaps-hot_spot-06722
 ```
+
+Validated MI300X/ROCm baseline run:
+
+- Commit: `b2d5378`
+- GPU: AMD Instinct MI300X VF
+- Runtime: PyTorch `2.9.1+rocm6.4`, HIP `6.4.43484`
+- Dataset: 20,000 RaptorMaps records, 16,000 train / 4,000 validation
+- Canonical 10-epoch run: validation accuracy `0.4775`, macro recall `0.346012`, macro F1 `0.31931`
+- Follow-up 15-epoch sweep: class-weight power `0.5` gave the best balanced result, with accuracy `0.67225`, macro recall `0.380194`, macro F1 `0.411179`; class-weight power `1.0` gave the best macro recall, `0.461672`, at lower accuracy `0.52725`
+
+Claim boundary: this proves a reproducible supervised training and inference path on AMD ROCm/MI300X. It does not prove production diagnostic accuracy.

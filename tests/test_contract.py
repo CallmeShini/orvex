@@ -86,6 +86,41 @@ def test_local_vlm_mode_validates_model_json() -> None:
     assert "return only one valid JSON object" in fake_client.received_prompt
 
 
+def test_local_vlm_mode_reuses_default_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    raw_output = json.dumps(
+        {
+            "image_modality": "infrared",
+            "contains_solar_panel": True,
+            "inspection_confidence": 0.72,
+            "overall_risk_score": 0.68,
+            "priority": "high",
+            "findings": [],
+            "human_review_required": True,
+            "summary": "Possible issue requires technician review.",
+        }
+    )
+    instances: list[FakeLocalVLMClient] = []
+
+    class CountingLocalVLMClient(FakeLocalVLMClient):
+        def __init__(self) -> None:
+            super().__init__(raw_output)
+            self.calls = 0
+            instances.append(self)
+
+        def analyze(self, image_path: Path, prompt: str) -> str:
+            self.calls += 1
+            return super().analyze(image_path=image_path, prompt=prompt)
+
+    monkeypatch.setattr("app.api.ai_service.LocalVLMClient", CountingLocalVLMClient)
+
+    service = OrvexAIService(mode="local")
+    service.analyze_image(filename="first-panel.jpg", file_obj=BytesIO(b"fake image bytes"))
+    service.analyze_image(filename="second-panel.jpg", file_obj=BytesIO(b"fake image bytes"))
+
+    assert len(instances) == 1
+    assert instances[0].calls == 2
+
+
 def test_local_vlm_mode_rejects_invalid_json() -> None:
     fake_client = FakeLocalVLMClient("not-json")
 

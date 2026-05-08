@@ -81,6 +81,14 @@ AI_MODE=local ORVEX_MAX_NEW_TOKENS=700 \
   .venv/bin/python scripts/smoke_local_vlm.py --sample raptormaps-hot_spot-06722
 ```
 
+Run the curated RaptorMaps smoke batch. This writes ignored JSON result files under `data/external/smoke_results/`:
+
+```bash
+HF_HOME=/workspace/orvex-git/data/external/hf-cache \
+AI_MODE=local ORVEX_MAX_NEW_TOKENS=700 \
+  .venv/bin/python scripts/smoke_local_vlm_batch.py
+```
+
 Start the API in local model mode:
 
 ```bash

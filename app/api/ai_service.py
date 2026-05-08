@@ -144,7 +144,9 @@ class OrvexAIService:
         return result
 
     def _analyze_local_vlm(self, image_path: Path, sample_name: str | None) -> InspectionResult:
-        client = self.local_vlm_client or LocalVLMClient()
+        if self.local_vlm_client is None:
+            self.local_vlm_client = LocalVLMClient()
+        client = self.local_vlm_client
         prompt = build_solar_inspection_prompt()
 
         try:

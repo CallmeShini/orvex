@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 
@@ -30,7 +30,15 @@ ALLOWED_IMAGE_CONTENT_TYPES = {
     "image/webp",
     "image/tiff",
 }
-MAX_UPLOAD_BYTES = int(os.getenv("ORVEX_MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
+ALLOWED_VIDEO_CONTENT_TYPES = {
+    "video/mp4",
+    "video/quicktime",
+    "video/webm",
+}
+DEFAULT_MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+DEFAULT_MAX_VIDEO_UPLOAD_BYTES = 250 * 1024 * 1024
+DEFAULT_VIDEO_FPS = 1.0
+DEFAULT_VIDEO_MAX_FRAMES = 48
 
 
 def cors_origins() -> list[str]:
@@ -114,15 +122,39 @@ async def analyze(
 
 @app.post("/inspection-jobs", response_model=InspectionJobResponse)
 async def create_inspection_job(
+    background_tasks: BackgroundTasks,
     sample_name: str | None = Form(default=None),
     file: UploadFile | None = File(default=None),
+    sample_fps: float = Form(default=DEFAULT_VIDEO_FPS),
+    max_frames: int = Form(default=DEFAULT_VIDEO_MAX_FRAMES),
 ) -> InspectionJobResponse:
     if file is None and not sample_name:
-        raise HTTPException(status_code=422, detail="Provide either sample_name or an image file.")
+        raise HTTPException(status_code=422, detail="Provide either sample_name or an image/video file.")
     if file is not None:
-        validate_upload(file)
+        validate_job_upload(file)
 
-    return get_job_service().create_image_job(
+    job_service = get_job_service()
+    if file is not None and file.content_type in ALLOWED_VIDEO_CONTENT_TYPES:
+        if sample_fps <= 0 or sample_fps > 2:
+            raise HTTPException(status_code=422, detail="sample_fps must be greater than 0 and at most 2.")
+        if max_frames <= 0 or max_frames > 120:
+            raise HTTPException(status_code=422, detail="max_frames must be greater than 0 and at most 120.")
+
+        job = job_service.create_video_job(
+            filename=file.filename or "inspection-video",
+            media_type=file.content_type or "application/octet-stream",
+            file_obj=file.file,
+        )
+        background_tasks.add_task(
+            job_service.process_video_job,
+            job.job_id,
+            get_ai_service(),
+            sample_fps,
+            max_frames,
+        )
+        return job
+
+    return job_service.create_image_job(
         ai_service=get_ai_service(),
         sample_name=sample_name,
         filename=file.filename if file else None,
@@ -149,14 +181,36 @@ def validate_upload(file: UploadFile) -> None:
             ),
         )
 
+    validate_upload_size(file, max_bytes=int(os.getenv("ORVEX_MAX_UPLOAD_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES))))
+
+
+def validate_job_upload(file: UploadFile) -> None:
+    if file.content_type in ALLOWED_IMAGE_CONTENT_TYPES:
+        validate_upload_size(file, max_bytes=int(os.getenv("ORVEX_MAX_UPLOAD_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES))))
+        return
+
+    if file.content_type in ALLOWED_VIDEO_CONTENT_TYPES:
+        validate_upload_size(
+            file,
+            max_bytes=int(os.getenv("ORVEX_MAX_VIDEO_UPLOAD_BYTES", str(DEFAULT_MAX_VIDEO_UPLOAD_BYTES))),
+        )
+        return
+
+    raise HTTPException(
+        status_code=415,
+        detail="Unsupported upload type. Use JPEG, PNG, WebP, TIFF, MP4, MOV, or WebM.",
+    )
+
+
+def validate_upload_size(file: UploadFile, max_bytes: int) -> None:
     current_position = file.file.tell()
     file.file.seek(0, os.SEEK_END)
     size = file.file.tell()
     file.file.seek(current_position)
-    if size > MAX_UPLOAD_BYTES:
+    if size > max_bytes:
         raise HTTPException(
             status_code=413,
-            detail=f"Upload exceeds the {MAX_UPLOAD_BYTES} byte limit.",
+            detail=f"Upload exceeds the {max_bytes} byte limit.",
         )
 
 

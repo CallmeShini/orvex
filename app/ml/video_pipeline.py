@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import shutil
 import subprocess
 from collections import Counter
 from dataclasses import dataclass
@@ -79,6 +80,7 @@ def build_ffmpeg_extract_command(
     ffmpeg_bin: str = "ffmpeg",
 ) -> list[str]:
     validate_frame_sampling(fps=fps, max_frames=max_frames)
+    ffmpeg_bin = resolve_ffmpeg_bin(ffmpeg_bin)
     return [
         ffmpeg_bin,
         "-hide_banner",
@@ -93,6 +95,18 @@ def build_ffmpeg_extract_command(
         str(max_frames),
         str(output_dir / DEFAULT_FRAME_PATTERN),
     ]
+
+
+def resolve_ffmpeg_bin(ffmpeg_bin: str = "ffmpeg") -> str:
+    if ffmpeg_bin != "ffmpeg" or shutil.which(ffmpeg_bin):
+        return ffmpeg_bin
+
+    try:
+        from imageio_ffmpeg import get_ffmpeg_exe
+    except ImportError:
+        return ffmpeg_bin
+
+    return get_ffmpeg_exe()
 
 
 def extract_video_frames(

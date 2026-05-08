@@ -4,8 +4,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app.api.ai_service import OrvexAIService
 from app.api.job_service import InspectionJobService
 from app.api.main import app
+from app.ml.video_pipeline import ExtractedFrame
 
 
 def test_create_and_fetch_sample_inspection_job(tmp_path: Path, monkeypatch) -> None:
@@ -61,11 +63,12 @@ def test_create_inspection_job_requires_input(tmp_path: Path, monkeypatch) -> No
     response = client.post("/inspection-jobs")
 
     assert response.status_code == 422
-    assert "sample_name or an image file" in response.json()["detail"]
+    assert "sample_name or an image/video file" in response.json()["detail"]
 
 
-def test_create_inspection_job_rejects_video_until_pipeline_exists(tmp_path: Path, monkeypatch) -> None:
+def test_create_inspection_job_accepts_video_and_queues_processing(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("app.api.main.get_job_service", lambda: InspectionJobService(jobs_dir=tmp_path))
+    monkeypatch.setattr("app.api.job_service.InspectionJobService.process_video_job", lambda *args, **kwargs: None)
     client = TestClient(app)
 
     response = client.post(
@@ -73,8 +76,36 @@ def test_create_inspection_job_rejects_video_until_pipeline_exists(tmp_path: Pat
         files={"file": ("inspection.mp4", b"fake video bytes", "video/mp4")},
     )
 
-    assert response.status_code == 415
-    assert "Video requires the planned inspection-job pipeline" in response.json()["detail"]
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "queued"
+    assert payload["source_type"] == "video"
+    assert payload["asset"]["filename"] == "inspection.mp4"
+    assert payload["asset"]["storage_path"].startswith("assets/asset-")
+
+
+def test_process_video_job_writes_aggregate_result(tmp_path: Path, monkeypatch) -> None:
+    frame_path = tmp_path / "frame-000001.jpg"
+    frame_path.write_bytes(b"frame")
+
+    def fake_extract_video_frames(**kwargs) -> list[ExtractedFrame]:
+        return [ExtractedFrame(frame_index=0, timestamp_ms=0, path=frame_path, sha256="abc")]
+
+    monkeypatch.setattr("app.api.job_service.extract_video_frames", fake_extract_video_frames)
+    service = InspectionJobService(jobs_dir=tmp_path)
+    job = service.create_video_job(
+        filename="inspection.mp4",
+        media_type="video/mp4",
+        file_obj=BytesReader(b"fake video bytes"),
+    )
+
+    completed = service.process_video_job(job.job_id, ai_service=OrvexAIService())
+
+    assert completed.status == "completed"
+    assert completed.result is not None
+    assert completed.video_result is not None
+    assert completed.video_result.summary.frames_analyzed == 1
+    assert (tmp_path / job.job_id / "results" / "video_evaluation.json").exists()
 
 
 def test_fetch_missing_inspection_job_returns_404(tmp_path: Path, monkeypatch) -> None:
@@ -84,3 +115,13 @@ def test_fetch_missing_inspection_job_returns_404(tmp_path: Path, monkeypatch) -
     response = client.get("/inspection-jobs/job-missing")
 
     assert response.status_code == 404
+
+
+class BytesReader:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+        self.position = 0
+
+    def read(self) -> bytes:
+        self.position = len(self.payload)
+        return self.payload

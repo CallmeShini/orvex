@@ -27,6 +27,57 @@ export type InspectionResult = {
   latency_ms: number | null;
 };
 
+export type VideoFrameAsset = {
+  frame_index: number;
+  timestamp_ms: number;
+  path: string;
+  sha256: string | null;
+};
+
+export type VideoFrameInspection = {
+  frame: VideoFrameAsset;
+  result: InspectionResult;
+  error: string | null;
+};
+
+export type VideoRepresentativeFrame = {
+  frame_index: number;
+  timestamp_ms: number;
+  inspection_id: string;
+  priority: Priority;
+  overall_risk_score: number;
+  summary: string;
+};
+
+export type VideoInspectionSummary = {
+  schema_version: string;
+  frames_analyzed: number;
+  frames_with_findings: number;
+  frames_with_errors: number;
+  frames_requiring_human_review: number;
+  priority: Priority;
+  max_overall_risk_score: number;
+  p95_overall_risk_score: number;
+  top_k_mean_overall_risk_score: number;
+  mean_overall_risk_score: number;
+  mean_inspection_confidence: number;
+  defect_type_counts: Record<string, number>;
+  model_mode_counts: Record<string, number>;
+  latency_ms_total: number | null;
+  latency_ms_mean: number | null;
+  representative_frame: VideoRepresentativeFrame;
+  human_review_required: boolean;
+};
+
+export type VideoEvaluationResult = {
+  schema_version: string;
+  source_video: string | null;
+  frame_count: number;
+  summary: VideoInspectionSummary;
+  run_metadata: Record<string, unknown>;
+  frames: VideoFrameInspection[];
+};
+
 export type AnalyzeResponse = {
   result: InspectionResult;
   report_path: string | null;
@@ -54,6 +105,7 @@ export type InspectionJobResponse = {
   source_type: "sample" | "image" | "video";
   asset: InspectionAsset | null;
   result: InspectionResult | null;
+  video_result: VideoEvaluationResult | null;
   report_id: string | null;
   report_markdown: string | null;
   error: string | null;

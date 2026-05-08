@@ -16,6 +16,16 @@ from app.api.schemas import (
     InspectionJobResponse,
     InspectionJobStatus,
     InspectionSourceType,
+    VideoEvaluationResult,
+)
+from app.ml.video_pipeline import (
+    DEFAULT_MAX_FRAMES,
+    DEFAULT_VIDEO_FPS,
+    FrameInspection,
+    VideoPipelineError,
+    extract_video_frames,
+    video_evaluation_payload,
+    write_frame_manifest,
 )
 
 
@@ -26,6 +36,9 @@ ASSET_SUFFIX_BY_MEDIA_TYPE = {
     "image/png": ".png",
     "image/webp": ".webp",
     "image/tiff": ".tiff",
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+    "video/webm": ".webm",
 }
 
 
@@ -98,6 +111,128 @@ class InspectionJobService:
         self._write(completed)
         return completed
 
+    def create_video_job(
+        self,
+        filename: str,
+        media_type: str,
+        file_obj: BinaryIO,
+    ) -> InspectionJobResponse:
+        now = utc_now()
+        job_id = f"job-{uuid4().hex[:12]}"
+        job_dir = self._job_dir(job_id)
+        asset = InspectionAsset(
+            asset_id=f"asset-{uuid4().hex[:12]}",
+            source_type=InspectionSourceType.VIDEO,
+            filename=Path(filename).name,
+            media_type=media_type,
+        )
+        asset, _asset_path = self._save_asset(job_dir=job_dir, asset=asset, filename=filename, file_obj=file_obj)
+        job = InspectionJobResponse(
+            job_id=job_id,
+            status=InspectionJobStatus.QUEUED,
+            source_type=InspectionSourceType.VIDEO,
+            asset=asset,
+            created_at=now,
+            updated_at=now,
+        )
+        self._write(job)
+        return job
+
+    def process_video_job(
+        self,
+        job_id: str,
+        ai_service: OrvexAIService,
+        sample_fps: float = DEFAULT_VIDEO_FPS,
+        max_frames: int = DEFAULT_MAX_FRAMES,
+        ffmpeg_bin: str = "ffmpeg",
+    ) -> InspectionJobResponse:
+        job = self.get_job(job_id)
+        if job.asset is None or job.asset.storage_path is None:
+            failed = job.model_copy(
+                update={
+                    "status": InspectionJobStatus.FAILED,
+                    "error": "Video job has no persisted source asset.",
+                    "updated_at": utc_now(),
+                }
+            )
+            self._write(failed)
+            return failed
+
+        processing = job.model_copy(update={"status": InspectionJobStatus.PROCESSING, "updated_at": utc_now()})
+        self._write(processing)
+
+        job_dir = self._job_dir(job.job_id)
+        video_path = job_dir / job.asset.storage_path
+        results_dir = job_dir / "results"
+        frames_dir = job_dir / "assets" / "frames"
+        manifest_path = results_dir / "frames_manifest.json"
+
+        try:
+            frames = extract_video_frames(
+                video_path=video_path,
+                output_dir=frames_dir,
+                fps=sample_fps,
+                max_frames=max_frames,
+                overwrite=True,
+                ffmpeg_bin=ffmpeg_bin,
+            )
+            write_frame_manifest(
+                manifest_path=manifest_path,
+                video_path=video_path,
+                frames=frames,
+                fps=sample_fps,
+                max_frames=max_frames,
+            )
+            frame_inspections = []
+            for frame in frames:
+                try:
+                    result = ai_service.analyze_image(filename=frame.path.name, image_path=frame.path)
+                    frame_inspections.append(FrameInspection(frame=frame, result=result))
+                except AiServiceError as exc:
+                    result = ai_service.inconclusive_result(raw_output=str(exc))
+                    frame_inspections.append(FrameInspection(frame=frame, result=result, error=str(exc)))
+
+            payload = video_evaluation_payload(
+                source_video=video_path,
+                frames=frames,
+                frame_inspections=frame_inspections,
+                run_metadata={
+                    "ai_mode": ai_service.mode,
+                    "sample_fps": sample_fps,
+                    "max_frames": max_frames,
+                    "claim_boundary": (
+                        "Video support is bounded frame-based triage. Results require human review "
+                        "and do not replace field inspection."
+                    ),
+                },
+            )
+            video_result = VideoEvaluationResult.model_validate(payload)
+            self._write_video_result(job_id=job.job_id, video_result=video_result)
+            representative_result = self._representative_result(video_result)
+            _report_path, report_markdown = write_report(representative_result)
+            completed = processing.model_copy(
+                update={
+                    "status": InspectionJobStatus.COMPLETED,
+                    "result": representative_result,
+                    "video_result": video_result,
+                    "report_id": representative_result.inspection_id,
+                    "report_markdown": report_markdown,
+                    "updated_at": utc_now(),
+                }
+            )
+            self._write(completed)
+            return completed
+        except (OSError, ValueError, VideoPipelineError) as exc:
+            failed = processing.model_copy(
+                update={
+                    "status": InspectionJobStatus.FAILED,
+                    "error": str(exc),
+                    "updated_at": utc_now(),
+                }
+            )
+            self._write(failed)
+            return failed
+
     def get_job(self, job_id: str) -> InspectionJobResponse:
         path = self._job_path(job_id)
         if not path.exists():
@@ -156,6 +291,22 @@ class InspectionJobService:
         tmp_path = path.with_suffix(".json.tmp")
         tmp_path.write_text(json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8")
         tmp_path.replace(path)
+
+    def _write_video_result(self, job_id: str, video_result: VideoEvaluationResult) -> None:
+        result_dir = self._job_dir(job_id) / "results"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        path = result_dir / "video_evaluation.json"
+        tmp_path = path.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(video_result.model_dump(mode="json"), indent=2, sort_keys=True), encoding="utf-8")
+        tmp_path.replace(path)
+
+    @staticmethod
+    def _representative_result(video_result: VideoEvaluationResult) -> InspectionResult:
+        representative_id = video_result.summary.representative_frame.inspection_id
+        for frame in video_result.frames:
+            if frame.result.inspection_id == representative_id:
+                return frame.result
+        return video_result.frames[0].result
 
 
 def assert_within_directory(destination: Path, directory: Path) -> None:

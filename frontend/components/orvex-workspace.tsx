@@ -30,6 +30,7 @@ import {
 
 const navItems = ["Overview", "Inspections", "Assets", "Reports", "Datasets", "Audit"];
 const allowedImageTypes = ["image/jpeg", "image/png", "image/webp", "image/tiff"];
+const allowedVideoTypes = ["video/mp4", "video/quicktime", "video/webm"];
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -64,6 +65,7 @@ export function OrvexWorkspace() {
     [samples, selectedName]
   );
   const demoSamples = useMemo(() => samples.filter((sample) => sample.is_demo), [samples]);
+  const uploadedIsVideo = Boolean(uploadedFile && allowedVideoTypes.includes(uploadedFile.type));
   const visualUrl = uploadedPreviewUrl ?? selectedImageUrl;
   const thermalizeVisual = Boolean(
     !uploadedPreviewUrl && selectedSample?.dataset === "RaptorMaps InfraredSolarModules"
@@ -147,7 +149,7 @@ export function OrvexWorkspace() {
   }, [selectedSample, uploadedFile]);
 
   useEffect(() => {
-    if (!uploadedFile) {
+    if (!uploadedFile || allowedVideoTypes.includes(uploadedFile.type)) {
       setUploadedPreviewUrl(null);
       return;
     }
@@ -162,13 +164,8 @@ export function OrvexWorkspace() {
       return;
     }
 
-    if (file.type.startsWith("video/")) {
-      setError("Video upload needs the planned frame-extraction job pipeline. This build enables image analysis only.");
-      return;
-    }
-
-    if (!allowedImageTypes.includes(file.type)) {
-      setError("Unsupported image type. Use JPEG, PNG, WebP, or TIFF.");
+    if (![...allowedImageTypes, ...allowedVideoTypes].includes(file.type)) {
+      setError("Unsupported upload type. Use JPEG, PNG, WebP, TIFF, MP4, MOV, or WebM.");
       return;
     }
 
@@ -196,15 +193,23 @@ export function OrvexWorkspace() {
     const body = new FormData();
     if (uploadedFile) {
       body.append("file", uploadedFile);
+      if (allowedVideoTypes.includes(uploadedFile.type)) {
+        body.append("sample_fps", "1");
+        body.append("max_frames", "48");
+      }
     } else if (selectedName) {
       body.append("sample_name", selectedName);
     }
 
     try {
-      const job = await fetchJson<InspectionJobResponse>("/api/orvex/inspection-jobs", {
+      const createdJob = await fetchJson<InspectionJobResponse>("/api/orvex/inspection-jobs", {
         method: "POST",
         body
       });
+      const job =
+        createdJob.status === "queued" || createdJob.status === "processing"
+          ? await pollInspectionJob(createdJob.job_id)
+          : createdJob;
       setInspectionJob(job);
       if (job.result) {
         setAnalysis({
@@ -223,6 +228,16 @@ export function OrvexWorkspace() {
     } finally {
       setAnalyzing(false);
     }
+  }
+
+  async function pollInspectionJob(jobId: string) {
+    let current = await fetchJson<InspectionJobResponse>(`/api/orvex/inspection-jobs/${jobId}`);
+    for (let attempt = 0; attempt < 60 && (current.status === "queued" || current.status === "processing"); attempt += 1) {
+      setInspectionJob(current);
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      current = await fetchJson<InspectionJobResponse>(`/api/orvex/inspection-jobs/${jobId}`);
+    }
+    return current;
   }
 
   function clearUpload() {
@@ -274,6 +289,7 @@ export function OrvexWorkspace() {
               result={result}
               selectedSample={selectedSample}
               thermalizeVisual={thermalizeVisual}
+              uploadedIsVideo={uploadedIsVideo}
               visualUrl={visualUrl}
             />
 
@@ -418,7 +434,7 @@ function InputPanel(props: InputPanelProps) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold tracking-tight">Inspection input</h2>
-          <p className="mt-1 text-sm leading-5 text-[#687066]">Use a curated sample or upload one panel image.</p>
+          <p className="mt-1 text-sm leading-5 text-[#687066]">Use a curated sample or upload one inspection asset.</p>
         </div>
         <button
           className="rounded-[6px] border border-[#d8d6cd] bg-white p-2 text-[#4b544a] transition hover:border-[#171a16] active:translate-y-[1px]"
@@ -435,12 +451,12 @@ function InputPanel(props: InputPanelProps) {
           Image
         </button>
         <button
-          className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-[7px] border border-[#d9d8d1] bg-[#f0efea] px-3 py-2 text-sm font-medium text-[#858a81]"
-          title="Video analysis needs the planned job pipeline with frame extraction."
+          className="inline-flex items-center justify-center gap-2 rounded-[7px] border border-[#bdddc8] bg-[#e8f5ed] px-3 py-2 text-sm font-medium text-[#256d3f]"
+          title="Bounded video frame analysis"
           type="button"
         >
           <VideoCamera size={16} />
-          Video planned
+          Video
         </button>
       </div>
 
@@ -452,12 +468,12 @@ function InputPanel(props: InputPanelProps) {
         onDragOver={props.onDragOver}
         onDrop={props.onDrop}
       >
-        <input accept="image/jpeg,image/png,image/webp,image/tiff" className="hidden" onChange={props.onFileInput} type="file" />
+        <input accept="image/jpeg,image/png,image/webp,image/tiff,video/mp4,video/quicktime,video/webm" className="hidden" onChange={props.onFileInput} type="file" />
         <UploadSimple className="text-[#2f8f5b]" size={30} weight="duotone" />
         <span className="mt-3 text-sm font-medium text-[#171a16]">
-          {props.uploadedFile ? props.uploadedFile.name : "Drop image here or browse"}
+          {props.uploadedFile ? props.uploadedFile.name : "Drop image or video here"}
         </span>
-        <span className="mt-1 text-xs text-[#687066]">JPEG, PNG, WebP or TIFF. Video is kept for the job pipeline.</span>
+        <span className="mt-1 text-xs text-[#687066]">JPEG, PNG, WebP, TIFF, MP4, MOV or WebM.</span>
       </label>
 
       {props.uploadedFile ? (
@@ -536,12 +552,14 @@ function InspectionCanvas({
   result,
   selectedSample,
   thermalizeVisual,
+  uploadedIsVideo,
   visualUrl
 }: {
   analyzing: boolean;
   result: InspectionResult | null;
   selectedSample: SampleInfo | null;
   thermalizeVisual: boolean;
+  uploadedIsVideo: boolean;
   visualUrl: string | null;
 }) {
   return (
@@ -584,6 +602,11 @@ function InspectionCanvas({
             {thermalizeVisual ? (
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_48%_50%,rgba(255,231,105,0.96)_0_4%,rgba(226,74,42,0.88)_9%,transparent_22%),linear-gradient(135deg,#1d1748,#6f1a6f_42%,#d84546_72%,#f0b44b)] opacity-75 mix-blend-color" />
             ) : null}
+          </div>
+        ) : uploadedIsVideo ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-[#151a15] text-white/86">
+            <VideoCamera size={44} weight="duotone" />
+            <div className="font-mono text-xs uppercase tracking-[0.14em] text-white/62">Frame extraction job</div>
           </div>
         ) : (
           <div className="thermal-grid h-full w-full" />
@@ -640,6 +663,7 @@ function ResultInspector({
   selectedSample: SampleInfo | null;
 }) {
   const result = analysis?.result ?? null;
+  const videoSummary = inspectionJob?.video_result?.summary ?? null;
   const priority = result?.priority ?? selectedSample?.priority ?? "inconclusive";
   const tone = priorityTone[priority];
 
@@ -663,8 +687,8 @@ function ResultInspector({
       </div>
 
       <div className="grid grid-cols-2 border-b border-[#deddd6]">
-        <Metric label="Risk score" value={formatScore(result?.overall_risk_score)} />
-        <Metric label="Confidence" value={formatScore(result?.inspection_confidence)} />
+        <Metric label="Risk score" value={formatScore(videoSummary?.max_overall_risk_score ?? result?.overall_risk_score)} />
+        <Metric label="Confidence" value={formatScore(videoSummary?.mean_inspection_confidence ?? result?.inspection_confidence)} />
       </div>
 
       <div className="border-b border-[#deddd6] p-4">
@@ -698,6 +722,21 @@ function ResultInspector({
         )}
       </div>
 
+      {videoSummary ? (
+        <div className="border-b border-[#deddd6] p-4">
+          <h3 className="text-sm font-semibold">Video aggregate</h3>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <MiniMetric label="Frames" value={String(videoSummary.frames_analyzed)} />
+            <MiniMetric label="Findings" value={String(videoSummary.frames_with_findings)} />
+            <MiniMetric label="P95 risk" value={formatScore(videoSummary.p95_overall_risk_score)} />
+            <MiniMetric label="Top-k risk" value={formatScore(videoSummary.top_k_mean_overall_risk_score)} />
+          </div>
+          <p className="mt-3 text-xs leading-5 text-[#687066]">
+            Representative frame at {Math.round(videoSummary.representative_frame.timestamp_ms / 1000)}s.
+          </p>
+        </div>
+      ) : null}
+
       <div className="border-b border-[#deddd6] p-4">
         <h3 className="text-sm font-semibold">Findings</h3>
         {result?.findings.length ? (
@@ -726,6 +765,7 @@ function ResultInspector({
           <TraceRow icon={<Cpu size={17} weight="duotone" />} label="Model" value={result?.model_name ?? "pending"} />
           <TraceRow icon={<Stack size={17} weight="duotone" />} label="Job" value={inspectionJob?.job_id ?? "not created"} />
           <TraceRow icon={<Pulse size={17} weight="duotone" />} label="Status" value={inspectionJob?.status ?? "idle"} />
+          <TraceRow icon={<VideoCamera size={17} weight="duotone" />} label="Frames" value={videoSummary ? String(videoSummary.frames_analyzed) : "n/a"} />
           <TraceRow icon={<Pulse size={17} weight="duotone" />} label="Mode" value={result?.model_mode ?? health?.ai_mode ?? "pending"} />
           <TraceRow icon={<ShieldCheck size={17} weight="duotone" />} label="Boundary" value="AI-assisted triage" />
           <TraceRow icon={<Stack size={17} weight="duotone" />} label="Schema" value={result?.schema_version ?? health?.schema_version ?? "pending"} />
@@ -760,6 +800,15 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="border-r border-[#deddd6] p-4 last:border-r-0">
       <div className="text-xs uppercase tracking-[0.12em] text-[#82887f]">{label}</div>
       <div className="mt-2 font-mono text-2xl text-[#171a16]">{value}</div>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-[#deddd6] bg-white p-3">
+      <div className="text-[11px] uppercase tracking-[0.12em] text-[#82887f]">{label}</div>
+      <div className="mt-1 font-mono text-sm text-[#171a16]">{value}</div>
     </div>
   );
 }

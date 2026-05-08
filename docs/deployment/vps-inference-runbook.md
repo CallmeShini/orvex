@@ -121,3 +121,53 @@ AI_MODE=local ORVEX_MAX_NEW_TOKENS=700 \
 - `scripts/smoke_local_vlm.py` returns one valid `InspectionResult` JSON.
 - The API can run with `AI_MODE=local`.
 - The UI shows `Model mode: local` for an analyzed image.
+
+## Offline Video Evidence Run
+
+Public video upload remains disabled. Use this path only for controlled local files on the VPS.
+
+Install `ffmpeg` if it is missing:
+
+```bash
+ffmpeg -version
+```
+
+Run a bounded video/frame evaluation:
+
+```bash
+cd /workspace/orvex
+RUN_ID="video-eval-$(date -u +%Y%m%dT%H%M%SZ)"
+AI_MODE=local ORVEX_MAX_NEW_TOKENS=700 \
+  .venv/bin/python scripts/evaluate_video_offline.py \
+  --video /workspace/private-videos/inspection.mp4 \
+  --output-dir "logs/evidence/${RUN_ID}" \
+  --sample-fps 1 \
+  --max-frames 120 \
+  --capture-rocm-evidence \
+  --torch-smoke
+```
+
+Expected ignored outputs:
+
+```txt
+logs/evidence/${RUN_ID}/frames/
+logs/evidence/${RUN_ID}/frames_manifest.json
+logs/evidence/${RUN_ID}/video_evaluation.json
+logs/evidence/${RUN_ID}/runtime_evidence.json
+```
+
+Quick evidence checks:
+
+```bash
+jq '.summary' "logs/evidence/${RUN_ID}/video_evaluation.json"
+jq '.torch, .commands.amd_smi_list.status, .commands.rocminfo.status' \
+  "logs/evidence/${RUN_ID}/runtime_evidence.json"
+rg -n "MI300X|AMD Instinct|HIP|ROCm|gfx" "logs/evidence/${RUN_ID}/runtime_evidence.json"
+```
+
+Claim boundary:
+
+```txt
+Offline video evidence run using timestamped frames and the Orvex inspection contract.
+Not public video ingestion, not production diagnostic accuracy, and not autonomous maintenance.
+```

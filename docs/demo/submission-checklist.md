@@ -29,6 +29,15 @@
 - [ ] Avoid unverified performance or accuracy claims.
 - [ ] Mention human-in-the-loop safety boundary.
 
+## ROCm Evidence
+
+- [ ] Evidence run directory captured under ignored `logs/evidence/`.
+- [ ] Repository commit and dirty state captured.
+- [ ] Runtime evidence includes `torch`, HIP/ROCm, `amd-smi` or `rocm-smi`, and device name.
+- [ ] Video/frame run records source permission, `sample_fps`, `max_frames`, frame count, and failures.
+- [ ] Aggregated result shows human-review requirement and representative timestamped frame.
+- [ ] Claims distinguish offline evidence from public video upload support.
+
 ## Demo Assets
 
 - [ ] Two-minute demo script.
@@ -46,6 +55,7 @@
 - [ ] Human-in-the-loop solar inspection workflow.
 - [ ] Structured preliminary maintenance report.
 - [ ] Open VLM workflow targeting AMD ROCm/MI300X.
+- [ ] Offline frame-evaluation evidence run on AMD ROCm/MI300X when runtime artifacts are shown.
 
 ## Claims Prohibited
 

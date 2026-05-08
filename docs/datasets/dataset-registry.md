@@ -109,3 +109,21 @@ expected contract outputs
 ```
 
 This keeps evaluation traceable and prevents the demo from mixing incompatible problem domains.
+
+## Video Evidence Inputs
+
+The offline video pipeline may use local video files for evidence runs, but raw media must remain outside Git.
+
+Track each video input in the run directory metadata instead of committing the file:
+
+```txt
+logs/evidence/video-eval-<run_id>/video_evaluation.json
+```
+
+Required notes for any video used in a presentation:
+
+- source and permission/license status;
+- whether the file is team-owned, public, or research/demo only;
+- modality, site context, and whether it shows real solar panels;
+- sampling config: `sample_fps`, `max_frames`, and extracted frame count;
+- claim boundary: offline evidence only, not public video upload support.

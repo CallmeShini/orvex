@@ -31,7 +31,9 @@ image/webp
 image/tiff
 ```
 
-Video uploads return `415` with an explicit message that the video pipeline is planned but not enabled.
+Video uploads return `415` with an explicit message that the public API is image-only.
+An offline frame-evaluation pipeline exists for controlled VPS evidence runs, but it is not wired
+to this endpoint yet.
 
 ## Current Execution Model
 
@@ -116,7 +118,8 @@ The Next.js UI now uses `/inspection-jobs`, but older demo clients can keep usin
 Allowed claim:
 
 ```txt
-Orvex now has a job-shaped API foundation for image inspections and future video ingestion.
+Orvex has a job-shaped API foundation for image inspections and an offline frame-evaluation
+pipeline for controlled video evidence runs.
 ```
 
 Not allowed yet:
@@ -125,7 +128,7 @@ Not allowed yet:
 Orvex supports video inspection.
 ```
 
-Video needs a separate implementation:
+Public video support still needs a separate implementation:
 
 ```txt
 video asset
@@ -133,5 +136,13 @@ video asset
 -> per-frame analysis
 -> timestamped evidence
 -> aggregation policy
+-> asynchronous worker/job status
 -> reviewable report
+```
+
+The current offline pipeline lives outside the API:
+
+```txt
+scripts/evaluate_video_offline.py
+docs/ml/video-frame-evaluation-rocm.md
 ```

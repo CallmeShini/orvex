@@ -4,6 +4,14 @@ Updated: 2026-05-08
 
 This runbook defines the next controlled ML step for Orvex: a supervised RaptorMaps baseline trained and evaluated on the AMD MI300X VPS with ROCm. It is a measurable comparator and possible low-latency fallback, not a replacement for Qwen2.5-VL or human review.
 
+For offline video/frame evidence runs, use the separate runbook:
+
+```txt
+docs/ml/video-frame-evaluation-rocm.md
+```
+
+Keep the two paths separate: this document is for training/evaluating the supervised RaptorMaps classifier; the video runbook is for timestamped frame evaluation and runtime evidence.
+
 ## Objective
 
 Train a small supervised image classifier on RaptorMaps InfraredSolarModules and expose its result through the existing Orvex `InspectionResult` contract.

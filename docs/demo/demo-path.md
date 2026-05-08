@@ -30,3 +30,25 @@ The path uses five curated RaptorMaps expected outputs plus one mock fallback. T
 - Do not claim technician replacement.
 - Do not claim commercial readiness.
 - Do describe them as a traceable evaluation/demo path using real RaptorMaps samples and curated reference outputs.
+
+## Offline ROCm Evidence Add-On
+
+If the final presentation includes video, frame it as an offline evidence run, not as public product upload:
+
+```txt
+short local video
+-> timestamped frame extraction
+-> per-frame Orvex inspection contract
+-> aggregated triage summary
+-> ROCm/MI300X runtime evidence
+```
+
+Required details to show:
+
+- run directory under `logs/evidence/video-eval-<timestamp>/`;
+- repository commit;
+- source video origin and license/permission status;
+- `sample_fps` and `max_frames`;
+- number of frames extracted and analyzed;
+- aggregate priority, human-review state, and representative timestamp;
+- `runtime_evidence.json` proving the AMD/ROCm runtime context.

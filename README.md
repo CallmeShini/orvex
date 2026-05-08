@@ -26,6 +26,8 @@ app/
     report_service.py
   ml/
     raptormaps_classifier.py
+    runtime_evidence.py
+    video_pipeline.py
   ui/
     streamlit_app.py
 frontend/
@@ -53,11 +55,16 @@ docs/
     dataset-registry.md
   ml/
     raptormaps-supervised-baseline-rocm.md
+    video-frame-evaluation-rocm.md
   frontend/
     nextjs-product-interface.md
   demo/
     submission-checklist.md
 scripts/
+  capture_runtime_evidence.py
+  evaluate_video_offline.py
+  evaluate_video_frames.py
+  extract_video_frames.py
   install_datasets.py
   train_raptormaps_classifier.py
   smoke_local_vlm.py
@@ -131,7 +138,7 @@ GET /inspection-jobs/{job_id}
 
 `POST /inspection-jobs` currently processes image or curated-sample jobs synchronously and returns a completed job envelope with the same validated `InspectionResult` used by `/analyze`.
 
-The legacy `/analyze` endpoint remains available for compatibility with older demo clients. Video files are intentionally rejected until the frame-extraction and aggregation pipeline exists.
+The legacy `/analyze` endpoint remains available for compatibility with older demo clients. Video files are still intentionally rejected by the public API/UI. The repository now has an offline frame-evaluation pipeline for controlled VPS evidence runs, but that is not public video-upload support.
 
 ### Legacy Streamlit UI
 
@@ -260,3 +267,39 @@ Validated MI300X/ROCm baseline run:
 - Follow-up 15-epoch sweep: class-weight power `0.5` gave the best balanced result, with accuracy `0.67225`, macro recall `0.380194`, macro F1 `0.411179`; class-weight power `1.0` gave the best macro recall, `0.461672`, at lower accuracy `0.52725`
 
 Claim boundary: this proves a reproducible supervised training and inference path on AMD ROCm/MI300X. It does not prove production diagnostic accuracy.
+
+## Offline Video Evidence Pipeline
+
+The video path is deliberately offline first:
+
+```txt
+local video file
+-> bounded ffmpeg frame extraction
+-> per-frame Orvex InspectionResult
+-> aggregate video triage summary
+-> optional ROCm/MI300X runtime evidence JSON
+```
+
+This keeps the public product honest while still proving the architecture can evaluate timestamped video frames on the AMD stack.
+
+Runbook:
+
+```txt
+docs/ml/video-frame-evaluation-rocm.md
+```
+
+Example VPS command:
+
+```bash
+RUN_ID="video-eval-$(date -u +%Y%m%dT%H%M%SZ)"
+AI_MODE=local ORVEX_MAX_NEW_TOKENS=700 \
+  .venv/bin/python scripts/evaluate_video_offline.py \
+  --video /workspace/private-videos/inspection.mp4 \
+  --output-dir "logs/evidence/${RUN_ID}" \
+  --sample-fps 1 \
+  --max-frames 120 \
+  --capture-rocm-evidence \
+  --torch-smoke
+```
+
+Claim boundary: this is offline frame evaluation with human review required. It does not mean the Next.js UI or FastAPI API accepts arbitrary video uploads yet.

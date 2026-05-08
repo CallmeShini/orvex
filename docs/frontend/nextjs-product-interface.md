@@ -54,7 +54,7 @@ Implemented now:
 
 Not implemented yet:
 
-- true video ingestion;
+- public video ingestion;
 - async job lifecycle;
 - tenant auth;
 - persistent database-backed reports;
@@ -63,6 +63,8 @@ Not implemented yet:
 ## Video Boundary
 
 The UI intentionally labels video as planned instead of accepting video files.
+The repository now has an offline video frame-evaluation pipeline for MI300X/ROCm evidence runs,
+but the product interface should present that as recorded evidence, not live upload support.
 
 The current FastAPI endpoint is synchronous and image-centric:
 

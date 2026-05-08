@@ -64,6 +64,23 @@ def test_service_lists_and_loads_dataset_expected_sample() -> None:
     assert result.model_mode == "mock:dataset_expected"
 
 
+def test_official_demo_path_is_ordered_and_traceable() -> None:
+    service = OrvexAIService(mode="mock")
+    demo_samples = [sample for sample in service.list_samples() if sample["is_demo"]]
+
+    assert [sample["name"] for sample in demo_samples] == [
+        "raptormaps-no_anomaly-10000",
+        "raptormaps-soiling-08157",
+        "raptormaps-cracking-06971",
+        "raptormaps-hot_spot-06722",
+        "raptormaps-offline_module-00000",
+        "inconclusive",
+    ]
+    assert [sample["demo_order"] for sample in demo_samples] == [1, 2, 3, 4, 5, 6]
+    assert all(sample["claim_boundary"] for sample in demo_samples)
+    assert all(sample["expected_output_source"] for sample in demo_samples)
+
+
 def test_extract_json_from_markdown_block() -> None:
     raw = """Here is the result:
 ```json

@@ -16,6 +16,7 @@ UPLOADS_DIR = DATA_DIR / "uploads"
 EVALUATION_DIR = DATA_DIR / "evaluation"
 EXPECTED_OUTPUTS_DIR = EVALUATION_DIR / "expected_outputs"
 RAPTORMAPS_MANIFEST_PATH = EVALUATION_DIR / "raptormaps_manifest.jsonl"
+DEMO_PATH = EVALUATION_DIR / "demo_path.json"
 
 
 class AiServiceError(RuntimeError):
@@ -29,8 +30,10 @@ class OrvexAIService:
 
     def list_samples(self) -> list[dict[str, Any]]:
         samples: list[dict[str, Any]] = []
+        demo_metadata = self._load_demo_path()
         for path in sorted(self.samples_dir.glob("*.json")):
             result = self._load_sample(path.stem)
+            demo_entry = demo_metadata.get(path.stem, {})
             samples.append(
                 {
                     "name": path.stem,
@@ -41,6 +44,18 @@ class OrvexAIService:
                     "source_label": "",
                     "orvex_bucket": "",
                     "image_available": False,
+                    "is_demo": bool(demo_entry),
+                    "demo_order": demo_entry.get("order"),
+                    "demo_stage": demo_entry.get("stage", ""),
+                    "demo_title": demo_entry.get("demo_title", ""),
+                    "demo_role": demo_entry.get("demo_role", ""),
+                    "demo_reason": demo_entry.get("reason", ""),
+                    "expected_output_source": demo_entry.get("expected_output_source", ""),
+                    "claim_boundary": demo_entry.get("claim_boundary", ""),
+                    "needs_human_review_reason": demo_entry.get("needs_human_review_reason", ""),
+                    "visual_limitations": demo_entry.get("visual_limitations", ""),
+                    "commercial_use_status": demo_entry.get("commercial_use_status", ""),
+                    "license": "",
                 }
             )
 
@@ -50,6 +65,7 @@ class OrvexAIService:
                 continue
             result = self._load_expected_sample(sample_id)
             image_path = PROJECT_ROOT / manifest_entry["local_path"]
+            demo_entry = demo_metadata.get(sample_id, {})
             samples.append(
                 {
                     "name": sample_id,
@@ -60,9 +76,29 @@ class OrvexAIService:
                     "source_label": manifest_entry["source_label"],
                     "orvex_bucket": manifest_entry["orvex_bucket"],
                     "image_available": image_path.exists(),
+                    "is_demo": bool(demo_entry),
+                    "demo_order": demo_entry.get("order"),
+                    "demo_stage": demo_entry.get("stage", ""),
+                    "demo_title": demo_entry.get("demo_title", ""),
+                    "demo_role": demo_entry.get("demo_role", ""),
+                    "demo_reason": demo_entry.get("reason", ""),
+                    "expected_output_source": demo_entry.get("expected_output_source", ""),
+                    "claim_boundary": demo_entry.get("claim_boundary", ""),
+                    "needs_human_review_reason": demo_entry.get("needs_human_review_reason", ""),
+                    "visual_limitations": demo_entry.get("visual_limitations", ""),
+                    "commercial_use_status": demo_entry.get("commercial_use_status", ""),
+                    "license": manifest_entry["license"],
                 }
             )
-        return samples
+        return sorted(
+            samples,
+            key=lambda sample: (
+                sample["demo_order"] is None,
+                sample["demo_order"] or 999,
+                sample["kind"],
+                sample["name"],
+            ),
+        )
 
     def analyze_image(
         self,
@@ -138,6 +174,14 @@ class OrvexAIService:
                 payload = json.loads(line)
                 entries[payload["sample_id"]] = payload
         return entries
+
+    @staticmethod
+    def _load_demo_path() -> dict[str, dict[str, Any]]:
+        if not DEMO_PATH.exists():
+            return {}
+
+        payload = json.loads(DEMO_PATH.read_text(encoding="utf-8"))
+        return {entry["sample_id"]: entry for entry in payload}
 
     @staticmethod
     def _expected_sample_exists(sample_name: str) -> bool:

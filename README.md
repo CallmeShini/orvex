@@ -137,3 +137,18 @@ unzip -q -o data/external/raptormaps/2020-02-14_InfraredSolarModules.zip \
 ```
 
 When the raw data exists locally, the Streamlit UI can preview the selected RaptorMaps samples. If the raw data is absent, the API can still use the expected JSON outputs.
+
+## Official Demo Path
+
+The local UI includes an official demo path with five curated RaptorMaps reference outputs and one mock fallback:
+
+```txt
+1. raptormaps-no_anomaly-10000
+2. raptormaps-soiling-08157
+3. raptormaps-cracking-06971
+4. raptormaps-hot_spot-06722
+5. raptormaps-offline_module-00000
+6. inconclusive
+```
+
+See `docs/demo/demo-path.md` for the walkthrough script and claim boundaries.

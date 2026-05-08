@@ -1,0 +1,80 @@
+[
+  {
+    "order": 1,
+    "sample_id": "raptormaps-no_anomaly-10000",
+    "stage": "Healthy baseline",
+    "demo_title": "Normal module reference",
+    "demo_role": "baseline",
+    "reason": "Starts the walkthrough with a low-risk infrared module so reviewers see the human-review boundary before anomalies appear.",
+    "expected_output_source": "curated_reference",
+    "claim_boundary": "Reference output, not measured model accuracy.",
+    "needs_human_review_reason": "Operational context can still change the maintenance decision.",
+    "visual_limitations": "24x40 infrared crop; no RGB confirmation.",
+    "commercial_use_status": "MIT dataset; commercial assumptions still require source review."
+  },
+  {
+    "order": 2,
+    "sample_id": "raptormaps-soiling-08157",
+    "stage": "Surface obstruction",
+    "demo_title": "Soiling review",
+    "demo_role": "maintenance",
+    "reason": "Covers an operational maintenance case that is less urgent but still actionable.",
+    "expected_output_source": "curated_reference",
+    "claim_boundary": "Reference output, not measured model accuracy.",
+    "needs_human_review_reason": "Cleaning decisions need site context and production comparison.",
+    "visual_limitations": "24x40 infrared crop; obstruction source may need RGB confirmation.",
+    "commercial_use_status": "MIT dataset; commercial assumptions still require source review."
+  },
+  {
+    "order": 3,
+    "sample_id": "raptormaps-cracking-06971",
+    "stage": "Structural suspicion",
+    "demo_title": "Cracking confirmation",
+    "demo_role": "human_review_limit",
+    "reason": "Shows a case where the system should recommend higher-resolution confirmation instead of overclaiming.",
+    "expected_output_source": "curated_reference",
+    "claim_boundary": "Reference output, not measured model accuracy.",
+    "needs_human_review_reason": "Thermal-only evidence is weak for confirming physical cracking.",
+    "visual_limitations": "24x40 infrared crop; structural claims require RGB or field confirmation.",
+    "commercial_use_status": "MIT dataset; commercial assumptions still require source review."
+  },
+  {
+    "order": 4,
+    "sample_id": "raptormaps-hot_spot-06722",
+    "stage": "Electrical anomaly",
+    "demo_title": "Localized hotspot",
+    "demo_role": "high_priority_fault",
+    "reason": "Shows a common high-priority electrical fault pattern with a clear maintenance action.",
+    "expected_output_source": "curated_reference",
+    "claim_boundary": "Reference output, not measured model accuracy.",
+    "needs_human_review_reason": "Technicians should compare thermal evidence with string and inverter telemetry.",
+    "visual_limitations": "24x40 infrared crop; no bounding box or delta-T measurement.",
+    "commercial_use_status": "MIT dataset; commercial assumptions still require source review."
+  },
+  {
+    "order": 5,
+    "sample_id": "raptormaps-offline_module-00000",
+    "stage": "Critical escalation",
+    "demo_title": "Offline module escalation",
+    "demo_role": "critical_escalation",
+    "reason": "Demonstrates a critical case that should move ahead of routine review.",
+    "expected_output_source": "curated_reference",
+    "claim_boundary": "Reference output, not measured model accuracy.",
+    "needs_human_review_reason": "Electrical troubleshooting needs telemetry and field verification.",
+    "visual_limitations": "24x40 infrared crop; no site, string, or inverter ID attached.",
+    "commercial_use_status": "MIT dataset; commercial assumptions still require source review."
+  },
+  {
+    "order": 6,
+    "sample_id": "inconclusive",
+    "stage": "Safe fallback",
+    "demo_title": "Inconclusive review",
+    "demo_role": "fallback",
+    "reason": "Closes the walkthrough by showing that weak evidence routes to human review instead of a forced diagnosis.",
+    "expected_output_source": "mock_fallback_reference",
+    "claim_boundary": "Fallback behavior only; not a dataset prediction.",
+    "needs_human_review_reason": "Weak or unsupported evidence should not be forced into a defect label.",
+    "visual_limitations": "No source image attached to the fallback mock.",
+    "commercial_use_status": "Internal product behavior reference."
+  }
+]

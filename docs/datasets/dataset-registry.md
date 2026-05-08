@@ -40,14 +40,49 @@ Keep the original dataset labels as `source_label` metadata so we can trace resu
 
 - Do not version raw datasets in Git.
 - Keep raw data outside the repository, preferably under a local ignored path such as `data/external/`.
+- Use `scripts/install_datasets.py` for repeatable VPS/local dataset intake instead of manual one-off downloads.
 - Keep only small demo samples in Git if license and attribution allow it.
 - Store a manifest before model work: source URL, local path, license, modality, original label, Orvex bucket, split, and notes.
 - Mark non-commercial datasets clearly as demo/research only.
 - Do not make accuracy, safety, production, or commercial claims from public datasets without controlled validation.
 
+## VPS Dataset Install
+
+Run from the repository root on the VPS:
+
+```bash
+.venv/bin/python scripts/install_datasets.py
+```
+
+This installs the project-relevant solar datasets under the ignored `data/external/` tree and writes a local manifest to:
+
+```txt
+data/external/_manifests/dataset_install_manifest.json
+```
+
+Expected behavior:
+
+- Direct public datasets download and extract automatically:
+  - `raptormaps`
+  - `thermal-pv-uav`
+  - `pv-multi-defect`
+- Kaggle datasets are attempted only when Kaggle CLI and credentials exist:
+  - `pv-panel-defect`
+  - `multimodal-ir-solar-pv-fault`
+- If Kaggle credentials are missing, the manifest records a `blocked` status and the exact next command/setup note. Do not commit `kaggle.json`.
+
+Useful focused runs:
+
+```bash
+.venv/bin/python scripts/install_datasets.py --direct-only
+.venv/bin/python scripts/install_datasets.py --kaggle-only
+.venv/bin/python scripts/install_datasets.py --validate-only
+.venv/bin/python scripts/install_datasets.py --datasets raptormaps pv-panel-defect
+```
+
 ## Recommended Next Slice
 
-The next slice should be a dataset intake pack, not model training:
+The next slice after installing datasets should be a dataset intake pack, not model training:
 
 ```txt
 download/open RaptorMaps

@@ -33,6 +33,26 @@ git pull
 .venv/bin/python -m pip install -r requirements-vps.txt
 ```
 
+For the public Git clone used during the hackathon, run from `/workspace/orvex-git` if that is the active clean repo checkout. Keep `/workspace/orvex` and team workspaces untouched unless the team explicitly agrees to migrate them.
+
+## Dataset Install
+
+Install the project-relevant solar datasets under the ignored `data/external/` tree:
+
+```bash
+.venv/bin/python scripts/install_datasets.py
+```
+
+The installer:
+
+- downloads direct public datasets from GitHub/Zenodo;
+- verifies available MD5 checksums for Zenodo archives;
+- extracts archives with zip-slip protection;
+- attempts Kaggle datasets only when Kaggle CLI credentials are present;
+- writes `data/external/_manifests/dataset_install_manifest.json`.
+
+Kaggle credential files such as `~/.kaggle/kaggle.json` must never be copied into this repository or committed.
+
 Verify GPU/PyTorch first:
 
 ```bash

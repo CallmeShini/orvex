@@ -42,6 +42,20 @@ class DefectType(str, Enum):
     UNKNOWN = "unknown"
 
 
+class InspectionSourceType(str, Enum):
+    SAMPLE = "sample"
+    IMAGE = "image"
+    VIDEO = "video"
+
+
+class InspectionJobStatus(str, Enum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    UNSUPPORTED = "unsupported"
+
+
 class Finding(BaseModel):
     defect_type: DefectType
     severity: Priority
@@ -75,6 +89,32 @@ class AnalyzeResponse(BaseModel):
     report_markdown: str | None = None
 
 
+class InspectionAsset(BaseModel):
+    asset_id: str
+    source_type: InspectionSourceType
+    filename: str | None = None
+    sample_name: str | None = None
+    media_type: str | None = None
+    storage_path: str | None = None
+    size_bytes: int | None = Field(default=None, ge=0)
+    sha256: str | None = None
+    frame_index: int | None = None
+    timestamp_ms: int | None = Field(default=None, ge=0)
+
+
+class InspectionJobResponse(BaseModel):
+    job_id: str
+    status: InspectionJobStatus
+    source_type: InspectionSourceType
+    asset: InspectionAsset | None = None
+    result: InspectionResult | None = None
+    report_id: str | None = None
+    report_markdown: str | None = None
+    error: str | None = None
+    created_at: str
+    updated_at: str
+
+
 class SampleInfo(BaseModel):
     name: str
     priority: Priority
@@ -90,4 +130,3 @@ class HealthResponse(BaseModel):
 
 def result_from_mapping(payload: dict[str, Any]) -> InspectionResult:
     return InspectionResult.model_validate(payload)
-

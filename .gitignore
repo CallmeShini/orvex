@@ -20,6 +20,8 @@ data/uploads/*
 !data/uploads/.gitkeep
 data/reports/*
 !data/reports/.gitkeep
+data/jobs/*
+!data/jobs/.gitkeep
 data/models/*
 !data/models/.gitkeep
 data/metrics/*

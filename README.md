@@ -38,6 +38,7 @@ data/
   evaluation/
     raptormaps_manifest.jsonl
     expected_outputs/
+  jobs/
   samples/
   reports/
 docs/
@@ -68,6 +69,7 @@ Build a production-compatible hackathon MVP:
 
 ```txt
 upload images
+-> inspection job
 -> multimodal analysis or transparent mock fallback
 -> validated JSON
 -> risk prioritization
@@ -117,6 +119,19 @@ http://127.0.0.1:3000
 ```
 
 The Next.js app is the canonical presentation/product interface. It calls FastAPI through its own `/api/orvex/*` proxy route so browser clients do not need direct CORS access to the Python service.
+
+## Inspection Job API
+
+The product-compatible API path is:
+
+```txt
+POST /inspection-jobs
+GET /inspection-jobs/{job_id}
+```
+
+`POST /inspection-jobs` currently processes image or curated-sample jobs synchronously and returns a completed job envelope with the same validated `InspectionResult` used by `/analyze`.
+
+The legacy `/analyze` endpoint remains available for compatibility with older demo clients. Video files are intentionally rejected until the frame-extraction and aggregation pipeline exists.
 
 ### Legacy Streamlit UI
 

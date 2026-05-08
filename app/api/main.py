@@ -7,12 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from app.api.ai_service import AiServiceError, OrvexAIService
+from app.api.job_service import InspectionJobNotFound, InspectionJobService
 from app.api.report_service import read_report, write_report
 from app.api.schemas import (
     HealthResponse,
     PROMPT_VERSION,
     SCHEMA_VERSION,
     AnalyzeResponse,
+    InspectionJobResponse,
 )
 
 
@@ -54,6 +56,10 @@ app.add_middleware(
 
 def get_ai_service() -> OrvexAIService:
     return OrvexAIService()
+
+
+def get_job_service() -> InspectionJobService:
+    return InspectionJobService()
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -104,6 +110,33 @@ async def analyze(
         report_path=str(report_path),
         report_markdown=report_markdown,
     )
+
+
+@app.post("/inspection-jobs", response_model=InspectionJobResponse)
+async def create_inspection_job(
+    sample_name: str | None = Form(default=None),
+    file: UploadFile | None = File(default=None),
+) -> InspectionJobResponse:
+    if file is None and not sample_name:
+        raise HTTPException(status_code=422, detail="Provide either sample_name or an image file.")
+    if file is not None:
+        validate_upload(file)
+
+    return get_job_service().create_image_job(
+        ai_service=get_ai_service(),
+        sample_name=sample_name,
+        filename=file.filename if file else None,
+        media_type=file.content_type if file else None,
+        file_obj=file.file if file else None,
+    )
+
+
+@app.get("/inspection-jobs/{job_id}", response_model=InspectionJobResponse)
+def inspection_job(job_id: str) -> InspectionJobResponse:
+    try:
+        return get_job_service().get_job(job_id)
+    except InspectionJobNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 def validate_upload(file: UploadFile) -> None:

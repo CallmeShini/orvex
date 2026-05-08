@@ -123,9 +123,10 @@ class OrvexAIService:
         sample_name: str | None = None,
         filename: str | None = None,
         file_obj: BinaryIO | None = None,
+        image_path: Path | None = None,
     ) -> InspectionResult:
         started = time.perf_counter()
-        upload_path: Path | None = None
+        upload_path: Path | None = image_path
 
         if file_obj and filename:
             upload_path = self._save_upload(filename, file_obj)

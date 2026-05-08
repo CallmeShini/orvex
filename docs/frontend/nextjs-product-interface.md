@@ -13,6 +13,7 @@ Browser
 -> Next.js App Router workspace
 -> Next.js route handler proxy /api/orvex/*
 -> FastAPI Orvex API
+-> inspection job envelope
 -> mock, local VLM, or RaptorMaps classifier mode
 -> validated InspectionResult
 -> report markdown
@@ -45,7 +46,8 @@ Implemented now:
 - operational inspection workspace, not a marketing landing page;
 - curated RaptorMaps demo path;
 - image upload for JPEG, PNG, WebP, and TIFF;
-- FastAPI analysis through a Next.js BFF/proxy;
+- FastAPI inspection jobs through a Next.js BFF/proxy;
+- `job_id` and `status` traceability in the result inspector;
 - risk, confidence, findings, model mode, schema, and human-review display;
 - loading, empty, error, and analyzed states;
 - restrained product UI using Next.js, React, TypeScript, Tailwind, Framer Motion, and Phosphor icons.
@@ -65,7 +67,7 @@ The UI intentionally labels video as planned instead of accepting video files.
 The current FastAPI endpoint is synchronous and image-centric:
 
 ```txt
-POST /analyze
+POST /inspection-jobs
 sample_name: optional form string
 file: optional image file
 ```

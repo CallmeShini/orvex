@@ -20,6 +20,7 @@ import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
 import {
   AnalyzeResponse,
   HealthResponse,
+  InspectionJobResponse,
   InspectionResult,
   SampleInfo,
   displaySampleName,
@@ -52,6 +53,7 @@ export function OrvexWorkspace() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
+  const [inspectionJob, setInspectionJob] = useState<InspectionJobResponse | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -172,6 +174,7 @@ export function OrvexWorkspace() {
 
     setUploadedFile(file);
     setAnalysis(null);
+    setInspectionJob(null);
     setError(null);
   }
 
@@ -198,11 +201,23 @@ export function OrvexWorkspace() {
     }
 
     try {
-      const response = await fetchJson<AnalyzeResponse>("/api/orvex/analyze", {
+      const job = await fetchJson<InspectionJobResponse>("/api/orvex/inspection-jobs", {
         method: "POST",
         body
       });
-      setAnalysis(response);
+      setInspectionJob(job);
+      if (job.result) {
+        setAnalysis({
+          result: job.result,
+          report_path: null,
+          report_markdown: job.report_markdown
+        });
+      } else {
+        setAnalysis(null);
+      }
+      if (job.error) {
+        setError(job.error);
+      }
     } catch (analysisError) {
       setError(analysisError instanceof Error ? analysisError.message : "Analysis failed.");
     } finally {
@@ -214,6 +229,7 @@ export function OrvexWorkspace() {
     setUploadedFile(null);
     setUploadedPreviewUrl(null);
     setAnalysis(null);
+    setInspectionJob(null);
     setError(null);
   }
 
@@ -247,6 +263,7 @@ export function OrvexWorkspace() {
                 setSelectedName(name);
                 setUploadedFile(null);
                 setAnalysis(null);
+                setInspectionJob(null);
                 setError(null);
               }}
               uploadedFile={uploadedFile}
@@ -263,6 +280,7 @@ export function OrvexWorkspace() {
             <ResultInspector
               analysis={analysis}
               health={health}
+              inspectionJob={inspectionJob}
               loading={analyzing}
               selectedSample={selectedSample}
             />
@@ -611,11 +629,13 @@ function InspectionCanvas({
 function ResultInspector({
   analysis,
   health,
+  inspectionJob,
   loading,
   selectedSample
 }: {
   analysis: AnalyzeResponse | null;
   health: HealthResponse | null;
+  inspectionJob: InspectionJobResponse | null;
   loading: boolean;
   selectedSample: SampleInfo | null;
 }) {
@@ -704,6 +724,8 @@ function ResultInspector({
         <h3 className="text-sm font-semibold">Model and compute</h3>
         <div className="mt-3 space-y-3 text-sm">
           <TraceRow icon={<Cpu size={17} weight="duotone" />} label="Model" value={result?.model_name ?? "pending"} />
+          <TraceRow icon={<Stack size={17} weight="duotone" />} label="Job" value={inspectionJob?.job_id ?? "not created"} />
+          <TraceRow icon={<Pulse size={17} weight="duotone" />} label="Status" value={inspectionJob?.status ?? "idle"} />
           <TraceRow icon={<Pulse size={17} weight="duotone" />} label="Mode" value={result?.model_mode ?? health?.ai_mode ?? "pending"} />
           <TraceRow icon={<ShieldCheck size={17} weight="duotone" />} label="Boundary" value="AI-assisted triage" />
           <TraceRow icon={<Stack size={17} weight="duotone" />} label="Schema" value={result?.schema_version ?? health?.schema_version ?? "pending"} />

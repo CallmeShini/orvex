@@ -33,6 +33,34 @@ export type AnalyzeResponse = {
   report_markdown: string | null;
 };
 
+export type InspectionJobStatus = "queued" | "processing" | "completed" | "failed" | "unsupported";
+
+export type InspectionAsset = {
+  asset_id: string;
+  source_type: "sample" | "image" | "video";
+  filename: string | null;
+  sample_name: string | null;
+  media_type: string | null;
+  storage_path: string | null;
+  size_bytes: number | null;
+  sha256: string | null;
+  frame_index: number | null;
+  timestamp_ms: number | null;
+};
+
+export type InspectionJobResponse = {
+  job_id: string;
+  status: InspectionJobStatus;
+  source_type: "sample" | "image" | "video";
+  asset: InspectionAsset | null;
+  result: InspectionResult | null;
+  report_id: string | null;
+  report_markdown: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type HealthResponse = {
   status: string;
   ai_mode: string;

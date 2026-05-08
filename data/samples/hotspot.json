@@ -1,0 +1,20 @@
+{
+  "image_modality": "thermal",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.86,
+  "overall_risk_score": 0.78,
+  "priority": "high",
+  "findings": [
+    {
+      "defect_type": "hotspot",
+      "severity": "high",
+      "confidence": 0.74,
+      "location_hint": "upper-right module area",
+      "visual_evidence": "A localized bright thermal region appears visually distinct from neighboring cells.",
+      "recommended_action": "Prioritize human review and schedule field verification for possible hotspot behavior."
+    }
+  ],
+  "human_review_required": true,
+  "summary": "Visual evidence suggests a possible hotspot-like anomaly that should be prioritized for human review."
+}
+

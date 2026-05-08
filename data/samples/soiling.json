@@ -1,0 +1,20 @@
+{
+  "image_modality": "rgb",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.79,
+  "overall_risk_score": 0.46,
+  "priority": "medium",
+  "findings": [
+    {
+      "defect_type": "soiling",
+      "severity": "medium",
+      "confidence": 0.68,
+      "location_hint": "lower-left surface region",
+      "visual_evidence": "A visible dull or uneven surface area appears consistent with possible soiling or residue.",
+      "recommended_action": "Route for human review and consider cleaning inspection if the asset context confirms persistent soiling."
+    }
+  ],
+  "human_review_required": true,
+  "summary": "The image appears to show possible surface soiling that may reduce module performance if confirmed."
+}
+

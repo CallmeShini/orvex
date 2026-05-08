@@ -1,0 +1,11 @@
+{
+  "image_modality": "unknown",
+  "contains_solar_panel": false,
+  "inspection_confidence": 0.21,
+  "overall_risk_score": 0.0,
+  "priority": "inconclusive",
+  "findings": [],
+  "human_review_required": true,
+  "summary": "The image does not provide enough reliable visual evidence for automated triage and should be reviewed manually."
+}
+

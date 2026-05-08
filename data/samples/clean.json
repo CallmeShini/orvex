@@ -1,0 +1,11 @@
+{
+  "image_modality": "thermal",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.82,
+  "overall_risk_score": 0.12,
+  "priority": "low",
+  "findings": [],
+  "human_review_required": false,
+  "summary": "The image appears consistent with a solar module inspection asset with no clear visible anomaly in the current view."
+}
+

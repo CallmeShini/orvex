@@ -17,6 +17,18 @@ The GPU VPS is reserved for serious model validation and inference work only. Pr
 ## Repository Map
 
 ```txt
+app/
+  api/
+    main.py
+    schemas.py
+    ai_service.py
+    json_utils.py
+    report_service.py
+  ui/
+    streamlit_app.py
+data/
+  samples/
+  reports/
 docs/
   product/
     product-brief.md
@@ -51,3 +63,49 @@ upload images
 - Keep VLM behavior constrained by versioned prompts and schemas.
 - Treat all model outputs as suggestions that require validation and human review.
 - Avoid claims about accuracy, autonomy, certification, or commercial readiness without evidence.
+
+## Local Day 1 Demo
+
+The current build runs in `AI_MODE=mock`. It does not require the GPU VPS.
+
+### Setup
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Run API
+
+```bash
+AI_MODE=mock uvicorn app.api.main:app --host 127.0.0.1 --port 8000
+```
+
+### Run UI
+
+Open a second terminal:
+
+```bash
+source .venv/bin/activate
+ORVEX_API_URL=http://127.0.0.1:8000 streamlit run app/ui/streamlit_app.py --server.port 8501
+```
+
+Then open:
+
+```txt
+http://localhost:8501
+```
+
+### Validate
+
+```bash
+source .venv/bin/activate
+pytest
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/samples
+```
+
+## Demo Boundary
+
+Mock mode is intentionally transparent. It exists so the user flow, report generation, JSON contract, and presentation can be validated before using MI300X inference.

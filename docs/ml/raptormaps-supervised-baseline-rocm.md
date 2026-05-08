@@ -156,6 +156,14 @@ Contract smoke:
   --output "${EVIDENCE_DIR}/api-smoke.json"
 ```
 
+Curated manifest evaluation:
+
+```bash
+.venv/bin/python scripts/evaluate_raptormaps_classifier_samples.py \
+  --artifact data/models/raptormaps_classifier.pt \
+  --output "${EVIDENCE_DIR}/classifier-manifest-eval.json"
+```
+
 Optional live API smoke:
 
 ```bash

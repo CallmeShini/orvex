@@ -203,6 +203,13 @@ ORVEX_CLASSIFIER_ARTIFACT=data/models/raptormaps_classifier.pt \
   .venv/bin/python scripts/smoke_raptormaps_classifier.py --sample raptormaps-hot_spot-06722
 ```
 
+Evaluate a trained artifact against the curated 24-sample Orvex manifest:
+
+```bash
+.venv/bin/python scripts/evaluate_raptormaps_classifier_samples.py \
+  --artifact data/models/raptormaps_classifier.pt
+```
+
 Validated MI300X/ROCm baseline run:
 
 - Commit: `b2d5378`

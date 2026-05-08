@@ -6,6 +6,9 @@ import time
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from app.api.json_utils import JsonExtractionError, extract_json_object
+from app.api.local_vlm import LocalVLMClient, LocalVLMError
+from app.api.prompting import build_solar_inspection_prompt
 from app.api.schemas import InspectionResult, result_from_mapping
 
 
@@ -24,9 +27,15 @@ class AiServiceError(RuntimeError):
 
 
 class OrvexAIService:
-    def __init__(self, mode: str | None = None, samples_dir: Path = SAMPLES_DIR) -> None:
+    def __init__(
+        self,
+        mode: str | None = None,
+        samples_dir: Path = SAMPLES_DIR,
+        local_vlm_client: LocalVLMClient | None = None,
+    ) -> None:
         self.mode = mode or os.getenv("AI_MODE", "mock")
         self.samples_dir = samples_dir
+        self.local_vlm_client = local_vlm_client
 
     def list_samples(self) -> list[dict[str, Any]]:
         samples: list[dict[str, Any]] = []
@@ -107,13 +116,23 @@ class OrvexAIService:
         file_obj: BinaryIO | None = None,
     ) -> InspectionResult:
         started = time.perf_counter()
+        upload_path: Path | None = None
 
         if file_obj and filename:
-            self._save_upload(filename, file_obj)
+            upload_path = self._save_upload(filename, file_obj)
 
-        if self.mode != "mock":
-            raise AiServiceError("Only AI_MODE=mock is implemented in the local Day 1 build.")
+        if self.mode == "mock":
+            result = self._analyze_mock(sample_name=sample_name, filename=filename)
+        elif self.mode in {"local", "vlm", "qwen"}:
+            image_path = self._resolve_input_image_path(sample_name=sample_name, upload_path=upload_path)
+            result = self._analyze_local_vlm(image_path=image_path, sample_name=sample_name)
+        else:
+            raise AiServiceError(f"Unsupported AI_MODE: {self.mode}")
 
+        result.latency_ms = int((time.perf_counter() - started) * 1000)
+        return result
+
+    def _analyze_mock(self, sample_name: str | None, filename: str | None) -> InspectionResult:
         selected_sample = sample_name or self._choose_sample_from_filename(filename)
         if selected_sample and self._expected_sample_exists(selected_sample):
             result = self._load_expected_sample(selected_sample)
@@ -122,8 +141,36 @@ class OrvexAIService:
             result = self._load_sample(selected_sample)
             result.model_mode = self.mode
 
-        result.latency_ms = int((time.perf_counter() - started) * 1000)
         return result
+
+    def _analyze_local_vlm(self, image_path: Path, sample_name: str | None) -> InspectionResult:
+        client = self.local_vlm_client or LocalVLMClient()
+        prompt = build_solar_inspection_prompt()
+
+        try:
+            raw_output = client.analyze(image_path=image_path, prompt=prompt)
+            payload = extract_json_object(raw_output)
+            payload.setdefault("inspection_id", sample_name or f"orvex-local-{int(time.time())}")
+            payload["raw_model_output"] = raw_output
+            payload["model_mode"] = self.mode
+            payload["model_name"] = client.model_name
+            return result_from_mapping(payload)
+        except (JsonExtractionError, LocalVLMError, ValueError) as exc:
+            raise AiServiceError(f"Local VLM output could not be validated: {exc}") from exc
+
+    def _resolve_input_image_path(self, sample_name: str | None, upload_path: Path | None) -> Path:
+        if upload_path is not None:
+            return upload_path
+
+        if sample_name:
+            try:
+                return self.get_sample_image_path(sample_name)
+            except FileNotFoundError as exc:
+                raise AiServiceError(
+                    f"AI_MODE={self.mode} requires a local image file for sample '{sample_name}'."
+                ) from exc
+
+        raise AiServiceError(f"AI_MODE={self.mode} requires an uploaded image or dataset sample image.")
 
     def get_sample_image_path(self, sample_name: str) -> Path:
         manifest_entry = self._load_manifest().get(sample_name)
@@ -209,9 +256,10 @@ class OrvexAIService:
         return "hotspot"
 
     @staticmethod
-    def _save_upload(filename: str, file_obj: BinaryIO) -> None:
+    def _save_upload(filename: str, file_obj: BinaryIO) -> Path:
         UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
         safe_name = Path(filename).name
         destination = UPLOADS_DIR / safe_name
         with destination.open("wb") as handle:
             handle.write(file_obj.read())
+        return destination

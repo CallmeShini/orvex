@@ -1,0 +1,10 @@
+-r requirements.txt
+
+accelerate>=1.0.0
+pillow>=10.4.0
+qwen-vl-utils[decord]==0.0.8
+
+# Qwen2.5-VL support can lag behind released Transformers wheels.
+# The official model card recommends installing Transformers from source
+# when `KeyError: qwen2_5_vl` appears.
+transformers @ git+https://github.com/huggingface/transformers

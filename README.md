@@ -152,3 +152,20 @@ The local UI includes an official demo path with five curated RaptorMaps referen
 ```
 
 See `docs/demo/demo-path.md` for the walkthrough script and claim boundaries.
+
+## GPU Inference Mode
+
+The default mode remains `AI_MODE=mock` for stable local demos. The GPU path is implemented behind `AI_MODE=local` and validates Qwen2.5-VL output against the same Orvex `InspectionResult` contract.
+
+VPS runbook:
+
+```txt
+docs/deployment/vps-inference-runbook.md
+```
+
+Smoke test command on the GPU host:
+
+```bash
+AI_MODE=local ORVEX_MAX_NEW_TOKENS=700 \
+  .venv/bin/python scripts/smoke_local_vlm.py --sample raptormaps-hot_spot-06722
+```

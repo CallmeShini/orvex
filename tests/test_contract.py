@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from io import BytesIO
 import json
 from pathlib import Path
 
 import pytest
 
-from app.api.ai_service import OrvexAIService
+from app.api.ai_service import AiServiceError, OrvexAIService
 from app.api.json_utils import JsonExtractionError, extract_json_object
 from app.api.schemas import InspectionResult
 
@@ -14,6 +15,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SAMPLES_DIR = PROJECT_ROOT / "data" / "samples"
 EVALUATION_DIR = PROJECT_ROOT / "data" / "evaluation"
 EXPECTED_OUTPUTS_DIR = EVALUATION_DIR / "expected_outputs"
+
+
+class FakeLocalVLMClient:
+    model_name = "fake-qwen-vl"
+
+    def __init__(self, raw_output: str) -> None:
+        self.raw_output = raw_output
+        self.received_image_path: Path | None = None
+        self.received_prompt = ""
+
+    def analyze(self, image_path: Path, prompt: str) -> str:
+        self.received_image_path = image_path
+        self.received_prompt = prompt
+        return self.raw_output
 
 
 @pytest.mark.parametrize("sample_path", sorted(SAMPLES_DIR.glob("*.json")))
@@ -30,6 +45,55 @@ def test_mock_service_returns_valid_result() -> None:
     assert result.priority == "high"
     assert result.human_review_required is True
     assert result.model_mode == "mock"
+
+
+def test_local_vlm_mode_validates_model_json() -> None:
+    fake_client = FakeLocalVLMClient(
+        json.dumps(
+            {
+                "image_modality": "infrared",
+                "contains_solar_panel": True,
+                "inspection_confidence": 0.72,
+                "overall_risk_score": 0.68,
+                "priority": "high",
+                "findings": [
+                    {
+                        "defect_type": "hotspot",
+                        "severity": "high",
+                        "confidence": 0.7,
+                        "location_hint": "center module area",
+                        "visual_evidence": "possible localized thermal anomaly",
+                        "recommended_action": "review against string telemetry",
+                    }
+                ],
+                "human_review_required": True,
+                "summary": "Possible hotspot requires technician review.",
+            }
+        )
+    )
+
+    result = OrvexAIService(mode="local", local_vlm_client=fake_client).analyze_image(
+        filename="uploaded-panel.jpg",
+        file_obj=BytesIO(b"fake image bytes"),
+    )
+
+    assert result.priority == "high"
+    assert result.model_mode == "local"
+    assert result.model_name == "fake-qwen-vl"
+    assert result.raw_model_output is not None
+    assert fake_client.received_image_path is not None
+    assert fake_client.received_image_path.name == "uploaded-panel.jpg"
+    assert "return only one valid JSON object" in fake_client.received_prompt
+
+
+def test_local_vlm_mode_rejects_invalid_json() -> None:
+    fake_client = FakeLocalVLMClient("not-json")
+
+    with pytest.raises(AiServiceError, match="Local VLM output could not be validated"):
+        OrvexAIService(mode="local", local_vlm_client=fake_client).analyze_image(
+            filename="uploaded-panel.jpg",
+            file_obj=BytesIO(b"fake image bytes"),
+        )
 
 
 def test_raptormaps_manifest_has_expected_outputs() -> None:

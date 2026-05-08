@@ -11,6 +11,10 @@ data/uploads/*
 !data/uploads/.gitkeep
 data/reports/*
 !data/reports/.gitkeep
+data/models/*
+!data/models/.gitkeep
+data/metrics/*
+!data/metrics/.gitkeep
 data/external/*
 data/external/**
 !data/external/.gitkeep

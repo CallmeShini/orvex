@@ -12,6 +12,16 @@ This runbook connects the local Orvex product flow to real GPU inference on the 
 - Product contract: `InspectionResult`
 - Model reference: https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct
 
+## Next Baseline Runbook
+
+The supervised RaptorMaps baseline is documented separately because it is a training-and-artifact workflow, not a VLM inference smoke test:
+
+```txt
+docs/ml/raptormaps-supervised-baseline-rocm.md
+```
+
+Use that runbook when the next VPS step is to capture a reproducible ROCm/MI300X supervised training baseline, artifact bundle, and cautious FastAPI/Streamlit integration path.
+
 ## Why This Path
 
 The app already has a stable mock and dataset expected-output mode. The VPS step should only replace the model execution layer, not the API contract or UI flow.

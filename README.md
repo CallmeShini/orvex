@@ -24,6 +24,8 @@ app/
     ai_service.py
     json_utils.py
     report_service.py
+  ml/
+    raptormaps_classifier.py
   ui/
     streamlit_app.py
 data/
@@ -42,8 +44,14 @@ docs/
     vlm-contract-v1.md
   datasets/
     dataset-registry.md
+  ml/
+    raptormaps-supervised-baseline-rocm.md
   demo/
     submission-checklist.md
+scripts/
+  install_datasets.py
+  train_raptormaps_classifier.py
+  smoke_local_vlm.py
 ```
 
 ## Near-Term Goal
@@ -168,4 +176,29 @@ Smoke test command on the GPU host:
 ```bash
 AI_MODE=local ORVEX_MAX_NEW_TOKENS=700 \
   .venv/bin/python scripts/smoke_local_vlm.py --sample raptormaps-hot_spot-06722
+```
+
+## Supervised RaptorMaps Baseline
+
+The RaptorMaps supervised baseline is a PyTorch/ROCm training path for the MI300X VPS. It is a measurable classifier stage for the 24x40 infrared dataset, not a replacement for Qwen2.5-VL or human review.
+
+Artifacts and metrics are ignored by Git:
+
+```txt
+data/models/raptormaps_classifier.pt
+data/metrics/raptormaps_classifier_metrics.json
+```
+
+Runbook:
+
+```txt
+docs/ml/raptormaps-supervised-baseline-rocm.md
+```
+
+After training on the VPS, the artifact can feed the existing API contract with:
+
+```bash
+AI_MODE=classifier \
+ORVEX_CLASSIFIER_ARTIFACT=data/models/raptormaps_classifier.pt \
+  .venv/bin/python scripts/smoke_raptormaps_classifier.py --sample raptormaps-hot_spot-06722
 ```

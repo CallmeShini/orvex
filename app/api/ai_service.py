@@ -10,6 +10,11 @@ from app.api.json_utils import JsonExtractionError, extract_json_object
 from app.api.local_vlm import LocalVLMClient, LocalVLMError
 from app.api.prompting import build_solar_inspection_prompt
 from app.api.schemas import InspectionResult, result_from_mapping
+from app.ml.raptormaps_classifier import (
+    RaptorMapsClassifierClient,
+    RaptorMapsClassifierError,
+    prediction_to_result,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -32,10 +37,12 @@ class OrvexAIService:
         mode: str | None = None,
         samples_dir: Path = SAMPLES_DIR,
         local_vlm_client: LocalVLMClient | None = None,
+        classifier_client: RaptorMapsClassifierClient | None = None,
     ) -> None:
         self.mode = mode or os.getenv("AI_MODE", "mock")
         self.samples_dir = samples_dir
         self.local_vlm_client = local_vlm_client
+        self.classifier_client = classifier_client
 
     def list_samples(self) -> list[dict[str, Any]]:
         samples: list[dict[str, Any]] = []
@@ -126,6 +133,9 @@ class OrvexAIService:
         elif self.mode in {"local", "vlm", "qwen"}:
             image_path = self._resolve_input_image_path(sample_name=sample_name, upload_path=upload_path)
             result = self._analyze_local_vlm(image_path=image_path, sample_name=sample_name)
+        elif self.mode in {"classifier", "supervised", "raptormaps", "raptormaps_classifier", "supervised_baseline"}:
+            image_path = self._resolve_input_image_path(sample_name=sample_name, upload_path=upload_path)
+            result = self._analyze_classifier(image_path=image_path, sample_name=sample_name)
         else:
             raise AiServiceError(f"Unsupported AI_MODE: {self.mode}")
 
@@ -159,6 +169,16 @@ class OrvexAIService:
             return result_from_mapping(payload)
         except (JsonExtractionError, LocalVLMError, ValueError) as exc:
             raise AiServiceError(f"Local VLM output could not be validated: {exc}") from exc
+
+    def _analyze_classifier(self, image_path: Path, sample_name: str | None) -> InspectionResult:
+        if self.classifier_client is None:
+            self.classifier_client = RaptorMapsClassifierClient()
+
+        try:
+            prediction = self.classifier_client.predict(image_path)
+            return prediction_to_result(prediction=prediction, sample_name=sample_name)
+        except (RaptorMapsClassifierError, ValueError) as exc:
+            raise AiServiceError(f"RaptorMaps classifier could not produce a validated result: {exc}") from exc
 
     def _resolve_input_image_path(self, sample_name: str | None, upload_path: Path | None) -> Path:
         if upload_path is not None:

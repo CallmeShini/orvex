@@ -114,6 +114,7 @@ def test_classifier_mode_uses_injected_client() -> None:
     result = service.analyze_image(filename="panel.jpg", file_obj=FakeUpload(b"image"))
 
     assert result.priority == Priority.LOW
+    assert result.human_review_required is True
     assert result.model_name == "fake-classifier"
     assert result.model_mode == "classifier:raptormaps"
 

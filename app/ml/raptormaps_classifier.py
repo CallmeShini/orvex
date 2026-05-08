@@ -265,7 +265,7 @@ def prediction_to_result(
         "overall_risk_score": risk,
         "priority": priority,
         "findings": findings,
-        "human_review_required": label != "No-Anomaly" or confidence < 0.75 or is_inconclusive,
+        "human_review_required": True,
         "summary": _summary_for_label(label, confidence, is_inconclusive=is_inconclusive),
         "raw_model_output": raw_output or json.dumps(asdict(prediction), sort_keys=True),
         "model_name": prediction.model_name,
@@ -278,13 +278,16 @@ def prediction_to_result(
 def _summary_for_label(label: str, confidence: float, is_inconclusive: bool) -> str:
     if is_inconclusive:
         return (
-            f"Supervised classifier confidence was too low for a reliable RaptorMaps label "
+            f"Supervised classifier score was too low for a reliable RaptorMaps label "
             f"({label}, {confidence:.2f}). Route this image to human review."
         )
     if label == "No-Anomaly":
-        return f"Supervised classifier found no RaptorMaps anomaly pattern with {confidence:.2f} confidence."
+        return (
+            "Supervised classifier found no RaptorMaps anomaly pattern "
+            f"with uncalibrated score {confidence:.2f}. Human review remains required."
+        )
     return (
-        f"Supervised classifier flagged a possible {label} pattern with {confidence:.2f} confidence. "
+        f"Supervised classifier flagged a possible {label} pattern with uncalibrated score {confidence:.2f}. "
         "Treat this as triage evidence and route to human review."
     )
 

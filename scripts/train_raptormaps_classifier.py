@@ -58,6 +58,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-per-class", type=int, default=None)
     parser.add_argument("--num-workers", type=int, default=2)
     parser.add_argument("--device", default="auto", help="auto, cpu, cuda, or a torch device string.")
+    parser.add_argument(
+        "--class-weight-power",
+        type=float,
+        default=0.5,
+        help="Exponent applied to inverse-frequency class weights. 0 disables weighting; 1 is full inverse weighting.",
+    )
+    parser.add_argument(
+        "--best-metric",
+        choices=("macro_recall", "macro_f1", "weighted_f1", "accuracy", "loss"),
+        default="macro_recall",
+        help="Validation metric used to select the saved checkpoint.",
+    )
     return parser.parse_args()
 
 
@@ -88,6 +100,34 @@ def hardware_metadata(torch: Any, device: Any) -> dict[str, Any]:
     return metadata
 
 
+def snapshot_state_dict(model: Any) -> dict[str, Any]:
+    return {key: value.detach().cpu().clone() for key, value in model.state_dict().items()}
+
+
+def metric_is_better(metric: str, score: float, best_score: float | None) -> bool:
+    if best_score is None:
+        return True
+    if metric == "loss":
+        return score < best_score
+    return score > best_score
+
+
+def validate_split_support(
+    train_records: list[RaptorMapsRecord],
+    val_records: list[RaptorMapsRecord],
+) -> None:
+    train_counts = Counter(record.label for record in train_records)
+    val_counts = Counter(record.label for record in val_records)
+    missing_train = [label for label in RAPTORMAPS_CLASSES if train_counts[label] == 0]
+    missing_val = [label for label in RAPTORMAPS_CLASSES if val_counts[label] == 0]
+    if missing_train or missing_val:
+        details = {
+            "missing_train": missing_train,
+            "missing_validation": missing_val,
+        }
+        raise ValueError(f"Stratified split lost class support: {json.dumps(details, sort_keys=True)}")
+
+
 def evaluate(model: Any, loader: Any, device: Any, num_classes: int) -> dict[str, Any]:
     torch, _nn = require_torch()
     model.eval()
@@ -114,6 +154,8 @@ def evaluate(model: Any, loader: Any, device: Any, num_classes: int) -> dict[str
     elapsed = max(time.perf_counter() - started, 0.001)
     per_class = []
     recalls = []
+    f1_scores = []
+    weighted_f1_total = 0.0
     for index, label in enumerate(RAPTORMAPS_CLASSES):
         tp = int(confusion[index, index].item())
         support = int(confusion[index, :].sum().item())
@@ -122,6 +164,8 @@ def evaluate(model: Any, loader: Any, device: Any, num_classes: int) -> dict[str
         recall = tp / support if support else 0.0
         f1 = (2 * precision * recall / (precision + recall)) if precision + recall else 0.0
         recalls.append(recall)
+        f1_scores.append(f1)
+        weighted_f1_total += f1 * support
         per_class.append(
             {
                 "label": label,
@@ -136,6 +180,8 @@ def evaluate(model: Any, loader: Any, device: Any, num_classes: int) -> dict[str
         "loss": round(total_loss / max(total, 1), 6),
         "accuracy": round(correct / max(total, 1), 6),
         "macro_recall": round(sum(recalls) / len(recalls), 6),
+        "macro_f1": round(sum(f1_scores) / len(f1_scores), 6),
+        "weighted_f1": round(weighted_f1_total / max(total, 1), 6),
         "samples_per_second": round(total / elapsed, 2),
         "per_class": per_class,
         "confusion_matrix": confusion.tolist(),
@@ -156,6 +202,7 @@ def main() -> None:
         seed=args.seed,
         max_per_class=args.max_per_class,
     )
+    validate_split_support(train_records, val_records)
     label_to_index = {label: index for index, label in enumerate(RAPTORMAPS_CLASSES)}
     device = resolve_device(torch, args.device)
 
@@ -180,15 +227,25 @@ def main() -> None:
     model = build_model(num_classes=len(RAPTORMAPS_CLASSES)).to(device)
     train_counts = Counter(record.label for record in train_records)
     class_weights = torch.tensor(
-        [len(train_records) / max(train_counts[label], 1) for label in RAPTORMAPS_CLASSES],
+        [
+            (len(train_records) / max(train_counts[label], 1)) ** args.class_weight_power
+            for label in RAPTORMAPS_CLASSES
+        ],
         dtype=torch.float32,
         device=device,
     )
-    class_weights = class_weights / class_weights.mean()
+    if args.class_weight_power > 0:
+        class_weights = class_weights / class_weights.mean()
+    else:
+        class_weights = torch.ones_like(class_weights)
     criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=1e-4)
 
     history = []
+    best_score: float | None = None
+    best_record: dict[str, Any] | None = None
+    best_metrics: dict[str, Any] | None = None
+    best_state_dict: dict[str, Any] | None = None
     started = time.perf_counter()
     print(json.dumps({"event": "hardware", **hardware_metadata(torch, device)}, sort_keys=True), flush=True)
     print(
@@ -236,12 +293,32 @@ def main() -> None:
             "train_samples_per_second": round(train_total / epoch_elapsed, 2),
             "val_accuracy": val_metrics["accuracy"],
             "val_macro_recall": val_metrics["macro_recall"],
+            "val_macro_f1": val_metrics["macro_f1"],
+            "val_weighted_f1": val_metrics["weighted_f1"],
             "val_loss": val_metrics["loss"],
         }
+        score = float(val_metrics[args.best_metric])
+        is_best = metric_is_better(args.best_metric, score, best_score)
+        record["is_best"] = is_best
+        if is_best:
+            best_score = score
+            best_record = dict(record)
+            best_metrics = dict(val_metrics)
+            best_state_dict = snapshot_state_dict(model)
         history.append(record)
         print(json.dumps({"event": "epoch", **record}, sort_keys=True), flush=True)
 
-    final_metrics = evaluate(model, val_loader, device, len(RAPTORMAPS_CLASSES))
+    last_metrics = evaluate(model, val_loader, device, len(RAPTORMAPS_CLASSES))
+    if best_state_dict is None or best_metrics is None or best_record is None:
+        best_state_dict = snapshot_state_dict(model)
+        best_metrics = last_metrics
+        best_record = {
+            "epoch": args.epochs,
+            "val_accuracy": last_metrics["accuracy"],
+            "val_macro_recall": last_metrics["macro_recall"],
+            "val_loss": last_metrics["loss"],
+            "is_best": True,
+        }
     elapsed = max(time.perf_counter() - started, 0.001)
     metadata = {
         "model_name": "raptormaps-tiny-thermal-cnn",
@@ -254,6 +331,10 @@ def main() -> None:
         "val_ratio": args.val_ratio,
         "seed": args.seed,
         "max_per_class": args.max_per_class,
+        "class_weight_power": args.class_weight_power,
+        "best_metric": args.best_metric,
+        "selected_epoch": best_record["epoch"],
+        "selection_policy": f"best validation {args.best_metric}",
         "train_records": len(train_records),
         "val_records": len(val_records),
         "total_train_seconds": round(elapsed, 3),
@@ -264,12 +345,13 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
-            "model_state_dict": model.cpu().state_dict(),
+            "model_state_dict": best_state_dict,
             "classes": list(RAPTORMAPS_CLASSES),
             "image_size": list(DEFAULT_IMAGE_SIZE),
             "metadata": metadata,
             "history": history,
-            "final_metrics": final_metrics,
+            "final_metrics": best_metrics,
+            "last_metrics": last_metrics,
         },
         output_path,
     )
@@ -282,14 +364,27 @@ def main() -> None:
         "train_distribution": class_distribution(train_records),
         "val_distribution": class_distribution(val_records),
         "history": history,
-        "final_metrics": final_metrics,
+        "final_metrics": best_metrics,
+        "last_metrics": last_metrics,
         "artifact_path": str(output_path),
     }
     metrics_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
-    print(json.dumps({"event": "saved", "artifact": str(output_path), "metrics": str(metrics_path)}, sort_keys=True), flush=True)
+    print(
+        json.dumps(
+            {
+                "event": "saved",
+                "artifact": str(output_path),
+                "metrics": str(metrics_path),
+                "selected_epoch": best_record["epoch"],
+                "selected_metric": args.best_metric,
+                "selected_score": best_score,
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
 
 
 if __name__ == "__main__":
     main()
-

@@ -6,6 +6,11 @@ __pycache__/
 .ruff_cache/
 .venv/
 .env
+*.ckpt
+*.onnx
+*.pt
+*.pth
+*.safetensors
 
 data/uploads/*
 !data/uploads/.gitkeep

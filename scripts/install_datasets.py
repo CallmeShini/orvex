@@ -35,6 +35,9 @@ class DatasetSpec:
     archive_name: str | None = None
     expected_md5: str | None = None
     expected_bytes: int | None = None
+    expected_min_files: int | None = None
+    expected_min_images: int | None = None
+    expected_min_annotations: int | None = None
     kaggle_slug: str | None = None
     notes: str = ""
 
@@ -53,6 +56,8 @@ DATASETS: tuple[DatasetSpec, ...] = (
         modality="infrared thermal classification",
         intended_use="Core classification baseline and curated thermal anomaly samples.",
         expected_bytes=15471926,
+        expected_min_files=20002,
+        expected_min_images=20000,
     ),
     DatasetSpec(
         key="thermal-pv-uav",
@@ -65,6 +70,9 @@ DATASETS: tuple[DatasetSpec, ...] = (
         archive_name="Thermal_PV_Panel_Detection_Dataset_for_UAV_Inspection.zip",
         expected_md5="c7c8b85ed4dbe6d7422e45b1776d3fa7",
         expected_bytes=15172606,
+        expected_min_files=704,
+        expected_min_images=353,
+        expected_min_annotations=351,
         license_status="CC BY 4.0",
         modality="thermal UAV object detection",
         intended_use="Optional site overview and panel localization narrative.",
@@ -80,6 +88,9 @@ DATASETS: tuple[DatasetSpec, ...] = (
         archive_name="PV-Multi-Defect-main.zip",
         expected_md5="cffbd957e8f502305191c745f0f50157",
         expected_bytes=43269389,
+        expected_min_files=2000,
+        expected_min_images=1000,
+        expected_min_annotations=1000,
         license_status="CC BY 4.0 on Zenodo; upstream GitHub repository has no explicit license file.",
         modality="RGB surface defect detection",
         intended_use="Optional detection experiment after annotation format review.",
@@ -93,6 +104,7 @@ DATASETS: tuple[DatasetSpec, ...] = (
         source_url="https://www.kaggle.com/datasets/alicjalena/pv-panel-defect-dataset",
         kaggle_slug="alicjalena/pv-panel-defect-dataset",
         expected_bytes=500359961,
+        expected_min_images=1574,
         license_status="CC BY-NC-SA 4.0; non-commercial research/demo only.",
         modality="RGB visual defect classification",
         intended_use="Demo-friendly visual classification supplement, not commercial evidence.",
@@ -106,6 +118,7 @@ DATASETS: tuple[DatasetSpec, ...] = (
         source_url="https://www.kaggle.com/datasets/khawlamnsr/multimodal-infrared-solar-pv-fault-dataset",
         kaggle_slug="khawlamnsr/multimodal-infrared-solar-pv-fault-dataset",
         expected_bytes=2224885576,
+        expected_min_images=1,
         license_status="MIT according to Kaggle metadata.",
         modality="module/string/delta-temperature infrared representations",
         intended_use="Technical plus for hierarchical thermal explanation views.",
@@ -248,6 +261,20 @@ def count_tree(path: Path, limit: int) -> dict[str, object]:
     }
 
 
+def summary_meets_expectations(spec: DatasetSpec, summary: dict[str, object]) -> bool:
+    total_files = int(summary.get("total_files") or 0)
+    image_files = int(summary.get("image_files") or 0)
+    annotation_files = int(summary.get("annotation_files") or 0)
+
+    if spec.expected_min_files is not None and total_files < spec.expected_min_files:
+        return False
+    if spec.expected_min_images is not None and image_files < spec.expected_min_images:
+        return False
+    if spec.expected_min_annotations is not None and annotation_files < spec.expected_min_annotations:
+        return False
+    return True
+
+
 def kaggle_command() -> list[str] | None:
     executable = shutil.which("kaggle")
     if executable:
@@ -295,10 +322,15 @@ def install_direct(spec: DatasetSpec, dataset_dir: Path, args: argparse.Namespac
         if args.no_extract:
             result["extract_action"] = "skipped"
         else:
-            result["extract_action"] = safe_extract_zip(archive_path, raw_dir, args.force)
+            pre_extract_summary = count_tree(raw_dir, args.limit_summary_files)
+            extract_force = args.force or not summary_meets_expectations(spec, pre_extract_summary)
+            result["extract_action"] = safe_extract_zip(archive_path, raw_dir, extract_force)
         result["status"] = "installed"
 
     result["summary"] = count_tree(raw_dir, args.limit_summary_files)
+    result["validation_passed"] = summary_meets_expectations(spec, result["summary"])
+    if result["status"] == "installed" and not args.no_extract and not result["validation_passed"]:
+        raise RuntimeError(f"{spec.key} did not meet expected dataset minimums after extraction")
     return result
 
 
@@ -327,6 +359,7 @@ def install_kaggle(spec: DatasetSpec, dataset_dir: Path, args: argparse.Namespac
     if args.validate_only:
         result["status"] = "validated"
         result["summary"] = count_tree(raw_dir, args.limit_summary_files)
+        result["validation_passed"] = summary_meets_expectations(spec, result["summary"])
         return result
 
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -345,6 +378,9 @@ def install_kaggle(spec: DatasetSpec, dataset_dir: Path, args: argparse.Namespac
     subprocess.run(kaggle_args, check=True)
     result["status"] = "installed"
     result["summary"] = count_tree(raw_dir, args.limit_summary_files)
+    result["validation_passed"] = summary_meets_expectations(spec, result["summary"])
+    if not result["validation_passed"]:
+        raise RuntimeError(f"{spec.key} did not meet expected dataset minimums after Kaggle download")
     return result
 
 

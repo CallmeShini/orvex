@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.install_datasets import DATASETS, count_tree, safe_extract_zip, write_manifest
+from scripts.install_datasets import DATASETS, count_tree, safe_extract_zip, summary_meets_expectations, write_manifest
 
 
 def test_dataset_keys_are_unique() -> None:
@@ -32,6 +32,17 @@ def test_count_tree_counts_images_and_annotations(tmp_path: Path) -> None:
     assert summary["total_files"] == 2
     assert summary["image_files"] == 1
     assert summary["annotation_files"] == 1
+
+
+def test_summary_expectations_detect_partial_raptormaps_install() -> None:
+    spec = next(dataset for dataset in DATASETS if dataset.key == "raptormaps")
+    partial_summary = {
+        "total_files": 1,
+        "image_files": 1,
+        "annotation_files": 0,
+    }
+
+    assert summary_meets_expectations(spec, partial_summary) is False
 
 
 def test_safe_extract_blocks_zip_slip(tmp_path: Path) -> None:

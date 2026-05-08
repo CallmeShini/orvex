@@ -10,10 +10,18 @@ import streamlit as st
 API_URL = os.getenv("ORVEX_API_URL", "http://127.0.0.1:8000")
 
 
-def fetch_samples() -> list[dict[str, str]]:
+def fetch_samples() -> list[dict[str, Any]]:
     response = requests.get(f"{API_URL}/samples", timeout=10)
     response.raise_for_status()
     return response.json()
+
+
+def fetch_sample_image(sample_name: str) -> bytes | None:
+    response = requests.get(f"{API_URL}/samples/{sample_name}/image", timeout=10)
+    if response.status_code == 404:
+        return None
+    response.raise_for_status()
+    return response.content
 
 
 def analyze(sample_name: str, uploaded_file: Any | None) -> dict[str, Any]:
@@ -38,6 +46,12 @@ def priority_badge(priority: str) -> str:
     }
     color = colors.get(priority, "#5f6368")
     return f"<span class='priority-pill' style='background:{color};'>{priority.upper()}</span>"
+
+
+def sample_display_name(sample: dict[str, Any]) -> str:
+    if sample.get("kind") == "dataset_expected":
+        return f"{sample['source_label']} · {sample['name']}"
+    return sample["name"]
 
 
 st.set_page_config(page_title="Orvex", page_icon=" ", layout="wide")
@@ -79,14 +93,35 @@ with left:
         st.code(str(exc))
         st.stop()
 
-    sample_names = [sample["name"] for sample in samples]
-    sample_name = st.selectbox("Demo scenario", sample_names, index=sample_names.index("hotspot") if "hotspot" in sample_names else 0)
+    sample_by_name = {sample["name"]: sample for sample in samples}
+    sample_names = list(sample_by_name)
+    sample_name = st.selectbox(
+        "Inspection sample",
+        sample_names,
+        index=sample_names.index("hotspot") if "hotspot" in sample_names else 0,
+        format_func=lambda name: sample_display_name(sample_by_name[name]),
+    )
+    selected_sample = sample_by_name[sample_name]
+
+    if selected_sample.get("kind") == "dataset_expected":
+        st.caption(
+            f"Dataset: {selected_sample['dataset']} | Source label: {selected_sample['source_label']} | Bucket: {selected_sample['orvex_bucket']}"
+        )
+        if selected_sample.get("image_available"):
+            try:
+                sample_image = fetch_sample_image(sample_name)
+            except requests.RequestException:
+                sample_image = None
+            if sample_image is not None:
+                st.image(sample_image, caption=sample_name, width="stretch")
+        else:
+            st.warning("Dataset image is not available locally. The expected JSON can still be analyzed.")
 
     uploaded_file = st.file_uploader("Optional inspection image", type=["png", "jpg", "jpeg", "webp"])
     if uploaded_file is not None:
-        st.image(uploaded_file, caption=uploaded_file.name, use_container_width=True)
+        st.image(uploaded_file, caption=uploaded_file.name, width="stretch")
 
-    run_analysis = st.button("Analyze inspection", type="primary", use_container_width=True)
+    run_analysis = st.button("Analyze inspection", type="primary", width="stretch")
 
     st.divider()
     st.caption("Current mode")
@@ -147,7 +182,7 @@ with right:
         data=report_markdown,
         file_name=f"{result['inspection_id']}.md",
         mime="text/markdown",
-        use_container_width=True,
+        width="stretch",
     )
 
     with st.expander("Raw JSON"):

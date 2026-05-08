@@ -1,0 +1,23 @@
+{
+  "inspection_id": "raptormaps-soiling-08157",
+  "image_modality": "infrared",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.7,
+  "overall_risk_score": 0.38,
+  "priority": "medium",
+  "findings": [
+    {
+      "defect_type": "soiling",
+      "severity": "medium",
+      "confidence": 0.65,
+      "location_hint": "module surface",
+      "visual_evidence": "The source label indicates dirt, dust, or debris on the module surface.",
+      "recommended_action": "Review cleaning schedule and compare output before and after cleaning."
+    }
+  ],
+  "human_review_required": true,
+  "summary": "Soiling is suspected and may require cleaning or closer review.",
+  "raw_model_output": null,
+  "model_name": "raptormaps-curated-expected-v1",
+  "model_mode": "dataset_expected"
+}

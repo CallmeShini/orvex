@@ -1,0 +1,23 @@
+{
+  "inspection_id": "raptormaps-hot_spot_multi-07911",
+  "image_modality": "infrared",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.76,
+  "overall_risk_score": 0.88,
+  "priority": "critical",
+  "findings": [
+    {
+      "defect_type": "hotspot",
+      "severity": "critical",
+      "confidence": 0.71,
+      "location_hint": "multiple module regions",
+      "visual_evidence": "Multiple hotspot signatures are present in the thermal crop.",
+      "recommended_action": "Escalate for urgent human review and check for repeated string-level anomalies."
+    }
+  ],
+  "human_review_required": true,
+  "summary": "Multiple hotspot signatures are present and should be escalated for urgent review.",
+  "raw_model_output": null,
+  "model_name": "raptormaps-curated-expected-v1",
+  "model_mode": "dataset_expected"
+}

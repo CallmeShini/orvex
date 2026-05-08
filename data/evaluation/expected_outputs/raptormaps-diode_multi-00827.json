@@ -1,0 +1,23 @@
+{
+  "inspection_id": "raptormaps-diode_multi-00827",
+  "image_modality": "infrared",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.74,
+  "overall_risk_score": 0.86,
+  "priority": "critical",
+  "findings": [
+    {
+      "defect_type": "diode",
+      "severity": "critical",
+      "confidence": 0.69,
+      "location_hint": "multiple substring areas",
+      "visual_evidence": "Multiple diode-like thermal bands are visible in the module crop.",
+      "recommended_action": "Escalate for human review and compare across the full string."
+    }
+  ],
+  "human_review_required": true,
+  "summary": "Multiple suspected diode/sub-string anomalies increase the operational priority.",
+  "raw_model_output": null,
+  "model_name": "raptormaps-curated-expected-v1",
+  "model_mode": "dataset_expected"
+}

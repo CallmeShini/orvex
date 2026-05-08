@@ -1,0 +1,23 @@
+{
+  "inspection_id": "raptormaps-cell-04846",
+  "image_modality": "infrared",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.78,
+  "overall_risk_score": 0.72,
+  "priority": "high",
+  "findings": [
+    {
+      "defect_type": "hotspot",
+      "severity": "high",
+      "confidence": 0.73,
+      "location_hint": "single-cell region",
+      "visual_evidence": "A compact cell-level thermal hotspot pattern is visible.",
+      "recommended_action": "Flag for technician review and compare against string performance data."
+    }
+  ],
+  "human_review_required": true,
+  "summary": "A suspected cell-level thermal anomaly is present and should be prioritized for technician review.",
+  "raw_model_output": null,
+  "model_name": "raptormaps-curated-expected-v1",
+  "model_mode": "dataset_expected"
+}

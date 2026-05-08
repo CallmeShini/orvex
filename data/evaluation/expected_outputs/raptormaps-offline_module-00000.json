@@ -1,0 +1,23 @@
+{
+  "inspection_id": "raptormaps-offline_module-00000",
+  "image_modality": "infrared",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.78,
+  "overall_risk_score": 0.91,
+  "priority": "critical",
+  "findings": [
+    {
+      "defect_type": "offline_module",
+      "severity": "critical",
+      "confidence": 0.73,
+      "location_hint": "entire module",
+      "visual_evidence": "The module is labeled as heated/offline relative to expected operation.",
+      "recommended_action": "Escalate for electrical troubleshooting and verify string/inverter data."
+    }
+  ],
+  "human_review_required": true,
+  "summary": "An offline-module thermal signature is present and should be escalated.",
+  "raw_model_output": null,
+  "model_name": "raptormaps-curated-expected-v1",
+  "model_mode": "dataset_expected"
+}

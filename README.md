@@ -27,6 +27,9 @@ app/
   ui/
     streamlit_app.py
 data/
+  evaluation/
+    raptormaps_manifest.jsonl
+    expected_outputs/
   samples/
   reports/
 docs/
@@ -109,3 +112,28 @@ curl http://127.0.0.1:8000/samples
 ## Demo Boundary
 
 Mock mode is intentionally transparent. It exists so the user flow, report generation, JSON contract, and presentation can be validated before using MI300X inference.
+
+## Dataset Intake
+
+The first real dataset intake uses RaptorMaps InfraredSolarModules.
+
+Raw data is stored locally under `data/external/raptormaps/` and is ignored by Git. The repository only tracks the small evaluation artifacts:
+
+```txt
+data/evaluation/raptormaps_manifest.jsonl
+data/evaluation/expected_outputs/
+```
+
+The manifest contains 24 selected RaptorMaps samples, two per source class, with source label, Orvex bucket, license, and local image path. The expected outputs are curated contract examples, not model predictions.
+
+To download the raw RaptorMaps dataset locally:
+
+```bash
+mkdir -p data/external/raptormaps
+curl -L https://github.com/RaptorMaps/InfraredSolarModules/raw/master/2020-02-14_InfraredSolarModules.zip \
+  -o data/external/raptormaps/2020-02-14_InfraredSolarModules.zip
+unzip -q -o data/external/raptormaps/2020-02-14_InfraredSolarModules.zip \
+  -d data/external/raptormaps/raw
+```
+
+When the raw data exists locally, the Streamlit UI can preview the selected RaptorMaps samples. If the raw data is absent, the API can still use the expected JSON outputs.

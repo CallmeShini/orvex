@@ -1,0 +1,23 @@
+{
+  "inspection_id": "raptormaps-cracking-06971",
+  "image_modality": "infrared",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.67,
+  "overall_risk_score": 0.58,
+  "priority": "medium",
+  "findings": [
+    {
+      "defect_type": "crack",
+      "severity": "medium",
+      "confidence": 0.62,
+      "location_hint": "module surface crop",
+      "visual_evidence": "The source label indicates a cracking-related module anomaly.",
+      "recommended_action": "Review with higher-resolution RGB imagery before confirming structural damage."
+    }
+  ],
+  "human_review_required": true,
+  "summary": "The module is labeled with a suspected cracking anomaly and needs visual confirmation.",
+  "raw_model_output": null,
+  "model_name": "raptormaps-curated-expected-v1",
+  "model_mode": "dataset_expected"
+}

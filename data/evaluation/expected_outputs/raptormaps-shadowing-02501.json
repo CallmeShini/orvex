@@ -1,0 +1,23 @@
+{
+  "inspection_id": "raptormaps-shadowing-02501",
+  "image_modality": "infrared",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.71,
+  "overall_risk_score": 0.42,
+  "priority": "medium",
+  "findings": [
+    {
+      "defect_type": "shadowing",
+      "severity": "medium",
+      "confidence": 0.66,
+      "location_hint": "module crop",
+      "visual_evidence": "Thermal pattern is consistent with shadowing or partial obstruction.",
+      "recommended_action": "Inspect surrounding vegetation, row spacing, and temporary shading sources."
+    }
+  ],
+  "human_review_required": true,
+  "summary": "A suspected shadowing condition may be reducing module performance.",
+  "raw_model_output": null,
+  "model_name": "raptormaps-curated-expected-v1",
+  "model_mode": "dataset_expected"
+}

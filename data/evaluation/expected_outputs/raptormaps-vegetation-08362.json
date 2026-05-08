@@ -1,0 +1,23 @@
+{
+  "inspection_id": "raptormaps-vegetation-08362",
+  "image_modality": "infrared",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.72,
+  "overall_risk_score": 0.45,
+  "priority": "medium",
+  "findings": [
+    {
+      "defect_type": "vegetation",
+      "severity": "medium",
+      "confidence": 0.67,
+      "location_hint": "module surroundings",
+      "visual_evidence": "The source label indicates vegetation-related obstruction.",
+      "recommended_action": "Inspect and clear vegetation if confirmed by site imagery."
+    }
+  ],
+  "human_review_required": true,
+  "summary": "Vegetation-related obstruction is suspected and should be checked in the field.",
+  "raw_model_output": null,
+  "model_name": "raptormaps-curated-expected-v1",
+  "model_mode": "dataset_expected"
+}

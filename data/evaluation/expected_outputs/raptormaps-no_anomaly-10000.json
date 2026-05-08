@@ -1,0 +1,14 @@
+{
+  "inspection_id": "raptormaps-no_anomaly-10000",
+  "image_modality": "infrared",
+  "contains_solar_panel": true,
+  "inspection_confidence": 0.84,
+  "overall_risk_score": 0.05,
+  "priority": "low",
+  "findings": [],
+  "human_review_required": true,
+  "summary": "No clear thermal anomaly is visible in this module crop. Routine human review is still recommended for operational context.",
+  "raw_model_output": null,
+  "model_name": "raptormaps-curated-expected-v1",
+  "model_mode": "dataset_expected"
+}

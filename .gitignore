@@ -11,4 +11,6 @@ data/uploads/*
 !data/uploads/.gitkeep
 data/reports/*
 !data/reports/.gitkeep
+data/external/
+data/curated/
 logs/

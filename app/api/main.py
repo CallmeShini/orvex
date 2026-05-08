@@ -4,7 +4,7 @@ import os
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 
 from app.api.ai_service import AiServiceError, OrvexAIService
 from app.api.report_service import read_report, write_report
@@ -46,8 +46,17 @@ def health() -> HealthResponse:
 
 
 @app.get("/samples")
-def samples() -> list[dict[str, str]]:
+def samples() -> list[dict[str, object]]:
     return get_ai_service().list_samples()
+
+
+@app.get("/samples/{sample_name}/image", response_class=FileResponse)
+def sample_image(sample_name: str) -> FileResponse:
+    try:
+        image_path = get_ai_service().get_sample_image_path(sample_name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(image_path, media_type="image/jpeg")
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
@@ -79,4 +88,3 @@ def report(inspection_id: str) -> str:
         return read_report(inspection_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-

@@ -354,7 +354,9 @@ class RaptorMapsClassifierClient:
             raise RaptorMapsClassifierError(f"Classifier artifact not found: {self.artifact_path}")
 
         torch, _nn = require_torch()
-        artifact = torch.load(self.artifact_path, map_location="cpu")
+        # The artifact is produced by our own training script and stores metadata
+        # alongside tensors, so PyTorch's weights-only loader cannot read it.
+        artifact = torch.load(self.artifact_path, map_location="cpu", weights_only=False)
         classes = tuple(artifact["classes"])
         model = build_model(num_classes=len(classes))
         model.load_state_dict(artifact["model_state_dict"])

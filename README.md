@@ -140,6 +140,24 @@ GET /inspection-jobs/{job_id}
 
 The legacy `/analyze` endpoint remains available for compatibility with older demo clients. Video files are still intentionally rejected by the public API/UI. The repository now has an offline frame-evaluation pipeline for controlled VPS evidence runs, but that is not public video-upload support.
 
+### Structured Runtime Events
+
+Inspection jobs write privacy-conscious JSONL events under the ignored job directory:
+
+```txt
+data/jobs/{job_id}/events.jsonl
+```
+
+The event stream records `job_created`, `asset_saved`, `job_completed`, and `job_failed` with trace fields such as `model_mode`, `latency_ms`, priority, asset ID, size, and content hash. It intentionally avoids absolute source paths and original filenames.
+
+Offline video evidence runs write similar events to:
+
+```txt
+logs/evidence/{run_id}/events.jsonl
+```
+
+Those runs record `video_frames_extracted` and `frame_analyzed` events so the AMD/ROCm narrative can be debugged without claiming public video-upload support or autonomous diagnosis.
+
 ### Legacy Streamlit UI
 
 Open a second terminal:
@@ -159,7 +177,13 @@ http://localhost:8501
 
 ```bash
 source .venv/bin/activate
-pytest
+pytest tests/test_inspection_jobs.py tests/test_contract.py tests/test_video_pipeline.py
+cd frontend && npm run typecheck
+```
+
+Optional API smoke checks:
+
+```bash
 curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8000/samples
 ```

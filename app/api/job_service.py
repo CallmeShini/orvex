@@ -17,6 +17,7 @@ from app.api.schemas import (
     InspectionJobStatus,
     InspectionSourceType,
 )
+from app.api.structured_events import append_structured_event
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -57,9 +58,6 @@ class InspectionJobService:
             sample_name=sample_name,
             media_type=media_type,
         )
-        if file_obj and filename:
-            asset, asset_path = self._save_asset(job_dir=job_dir, asset=asset, filename=filename, file_obj=file_obj)
-
         job = InspectionJobResponse(
             job_id=job_id,
             status=InspectionJobStatus.PROCESSING,
@@ -69,6 +67,27 @@ class InspectionJobService:
             updated_at=now,
         )
         self._write(job)
+        self._log_event(
+            job_id=job_id,
+            event="job_created",
+            status=job.status.value,
+            source_type=source_type.value,
+            asset_id=asset.asset_id,
+            sample_name=sample_name,
+            media_type=asset.media_type,
+        )
+        if file_obj and filename:
+            asset, asset_path = self._save_asset(job_dir=job_dir, asset=asset, filename=filename, file_obj=file_obj)
+            self._log_event(
+                job_id=job_id,
+                event="asset_saved",
+                asset_id=asset.asset_id,
+                source_type=asset.source_type.value,
+                media_type=asset.media_type,
+                storage_path=asset.storage_path,
+                size_bytes=asset.size_bytes,
+                sha256=asset.sha256,
+            )
 
         try:
             result = ai_service.analyze_image(
@@ -81,6 +100,12 @@ class InspectionJobService:
         except Exception:
             failed = job.model_copy(update={"status": InspectionJobStatus.FAILED, "updated_at": utc_now()})
             self._write(failed)
+            self._log_event(
+                job_id=job_id,
+                event="job_failed",
+                status=failed.status.value,
+                error_type="unexpected_exception",
+            )
             raise
 
         _report_path, report_markdown = write_report(result)
@@ -96,6 +121,19 @@ class InspectionJobService:
             }
         )
         self._write(completed)
+        self._log_event(
+            job_id=job_id,
+            event="job_completed",
+            status=completed.status.value,
+            inspection_id=result.inspection_id,
+            model_mode=result.model_mode,
+            model_name=result.model_name,
+            latency_ms=result.latency_ms,
+            priority=result.priority.value,
+            findings_count=len(result.findings),
+            human_review_required=result.human_review_required,
+            report_id=completed.report_id,
+        )
         return completed
 
     def get_job(self, job_id: str) -> InspectionJobResponse:
@@ -120,6 +158,12 @@ class InspectionJobService:
     def _job_dir(self, job_id: str) -> Path:
         safe_job_id = Path(job_id).name
         return self.jobs_dir / safe_job_id
+
+    def _events_path(self, job_id: str) -> Path:
+        return self._job_dir(job_id) / "events.jsonl"
+
+    def _log_event(self, job_id: str, event: str, **fields: object) -> None:
+        append_structured_event(self._events_path(job_id), event=event, job_id=job_id, **fields)
 
     def _save_asset(
         self,

@@ -17,6 +17,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Orvex classifier mode through the InspectionResult contract.")
     parser.add_argument("--artifact", default="data/models/raptormaps_classifier.pt")
     parser.add_argument("--sample", default="raptormaps-hot_spot-06722")
+    parser.add_argument(
+        "--image",
+        default=None,
+        help="Optional local image path. When provided, the classifier runs on this image instead of a manifest sample.",
+    )
     parser.add_argument("--output", default=None, help="Optional JSON output path.")
     return parser.parse_args()
 
@@ -25,7 +30,8 @@ def main() -> None:
     args = parse_args()
     os.environ["ORVEX_CLASSIFIER_ARTIFACT"] = args.artifact
     service = OrvexAIService(mode="classifier")
-    result = service.analyze_image(sample_name=args.sample)
+    image_path = Path(args.image) if args.image else None
+    result = service.analyze_image(sample_name=None if image_path else args.sample, image_path=image_path)
     payload = result.model_dump(mode="json")
     text = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
     if args.output:

@@ -78,6 +78,11 @@ export type VideoEvaluationResult = {
   frames: VideoFrameInspection[];
 };
 
+export type VideoJobProcessingParams = {
+  sample_fps: number;
+  max_frames: number;
+};
+
 export type AnalyzeResponse = {
   result: InspectionResult;
   report_path: string | null;
@@ -104,6 +109,7 @@ export type InspectionJobResponse = {
   status: InspectionJobStatus;
   source_type: "sample" | "image" | "video";
   asset: InspectionAsset | null;
+  video_processing: VideoJobProcessingParams | null;
   result: InspectionResult | null;
   video_result: VideoEvaluationResult | null;
   report_id: string | null;

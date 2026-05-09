@@ -142,10 +142,16 @@ The legacy `/analyze` endpoint remains available for compatibility with older de
 
 ```bash
 ORVEX_ENABLE_VIDEO_UPLOAD=true
-ORVEX_VIDEO_PROCESSING_MODE=background
+ORVEX_VIDEO_PROCESSING_MODE=queue
+ORVEX_VIDEO_WORKER_COUNT=1
+ORVEX_VIDEO_QUEUE_MAX_SIZE=32
 ```
 
-That mode uses FastAPI `BackgroundTasks` in the API process and is not a durable worker queue.
+That mode uses an in-process worker queue. The API persists the video job and asset,
+returns a `queued` job immediately, and worker threads extract bounded frames,
+analyze each frame, write `video_evaluation.json`, and update `job.json`.
+The older value `ORVEX_VIDEO_PROCESSING_MODE=background` is still accepted as
+a compatibility alias, but execution now goes through the same queue.
 
 ### Legacy Streamlit UI
 

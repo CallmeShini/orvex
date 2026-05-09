@@ -153,11 +153,17 @@ class VideoEvaluationResult(BaseModel):
     frames: list[VideoFrameInspection] = Field(default_factory=list)
 
 
+class VideoJobProcessingParams(BaseModel):
+    sample_fps: float = Field(gt=0.0)
+    max_frames: int = Field(gt=0)
+
+
 class InspectionJobResponse(BaseModel):
     job_id: str
     status: InspectionJobStatus
     source_type: InspectionSourceType
     asset: InspectionAsset | None = None
+    video_processing: VideoJobProcessingParams | None = None
     result: InspectionResult | None = None
     video_result: VideoEvaluationResult | None = None
     report_id: str | None = None

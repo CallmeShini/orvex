@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import re
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
@@ -16,6 +17,7 @@ from app.api.schemas import (
     InspectionJobResponse,
     InspectionJobStatus,
     InspectionSourceType,
+    VideoJobProcessingParams,
     VideoEvaluationResult,
 )
 from app.ml.video_pipeline import (
@@ -119,6 +121,8 @@ class InspectionJobService:
         media_type: str,
         file_obj: BinaryIO,
         max_bytes: int = DEFAULT_VIDEO_ASSET_MAX_BYTES,
+        sample_fps: float = DEFAULT_VIDEO_FPS,
+        max_frames: int = DEFAULT_MAX_FRAMES,
     ) -> InspectionJobResponse:
         now = utc_now()
         job_id = f"job-{uuid4().hex[:12]}"
@@ -141,6 +145,7 @@ class InspectionJobService:
             status=InspectionJobStatus.QUEUED,
             source_type=InspectionSourceType.VIDEO,
             asset=asset,
+            video_processing=VideoJobProcessingParams(sample_fps=sample_fps, max_frames=max_frames),
             created_at=now,
             updated_at=now,
         )
@@ -248,6 +253,43 @@ class InspectionJobService:
             raise InspectionJobNotFound(f"Inspection job not found: {job_id}")
         payload = json.loads(path.read_text(encoding="utf-8"))
         return InspectionJobResponse.model_validate(payload)
+
+    def list_jobs(self) -> list[InspectionJobResponse]:
+        if not self.jobs_dir.exists():
+            return []
+
+        jobs: list[InspectionJobResponse] = []
+        for path in sorted(self.jobs_dir.glob("job-*/job.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                jobs.append(InspectionJobResponse.model_validate(payload))
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+        return jobs
+
+    def list_video_jobs(
+        self,
+        statuses: Iterable[InspectionJobStatus] | None = None,
+    ) -> list[InspectionJobResponse]:
+        status_filter = set(statuses) if statuses is not None else None
+        return [
+            job
+            for job in self.list_jobs()
+            if job.source_type == InspectionSourceType.VIDEO
+            and (status_filter is None or job.status in status_filter)
+        ]
+
+    def mark_job_failed(self, job_id: str, error: str) -> InspectionJobResponse:
+        job = self.get_job(job_id)
+        failed = job.model_copy(
+            update={
+                "status": InspectionJobStatus.FAILED,
+                "error": error,
+                "updated_at": utc_now(),
+            }
+        )
+        self._write(failed)
+        return failed
 
     def _write(self, job: InspectionJobResponse) -> None:
         job_dir = self._job_dir(job.job_id)

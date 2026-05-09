@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import re
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
@@ -16,6 +17,7 @@ from app.api.schemas import (
     InspectionJobResponse,
     InspectionJobStatus,
     InspectionSourceType,
+    VideoJobProcessingParams,
     VideoEvaluationResult,
 )
 from app.ml.video_pipeline import (
@@ -32,6 +34,8 @@ from app.api.structured_events import append_structured_event
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 JOBS_DIR = PROJECT_ROOT / "data" / "jobs"
+DEFAULT_ASSET_STREAM_CHUNK_BYTES = 1024 * 1024
+DEFAULT_VIDEO_ASSET_MAX_BYTES = 50 * 1024 * 1024
 ASSET_SUFFIX_BY_MEDIA_TYPE = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -154,6 +158,9 @@ class InspectionJobService:
         filename: str,
         media_type: str,
         file_obj: BinaryIO,
+        max_bytes: int = DEFAULT_VIDEO_ASSET_MAX_BYTES,
+        sample_fps: float = DEFAULT_VIDEO_FPS,
+        max_frames: int = DEFAULT_MAX_FRAMES,
     ) -> InspectionJobResponse:
         now = utc_now()
         job_id = f"job-{uuid4().hex[:12]}"
@@ -164,12 +171,19 @@ class InspectionJobService:
             filename=Path(filename).name,
             media_type=media_type,
         )
-        asset, _asset_path = self._save_asset(job_dir=job_dir, asset=asset, filename=filename, file_obj=file_obj)
+        asset, _asset_path = self._save_asset_streaming(
+            job_dir=job_dir,
+            asset=asset,
+            filename=filename,
+            file_obj=file_obj,
+            max_bytes=max_bytes,
+        )
         job = InspectionJobResponse(
             job_id=job_id,
             status=InspectionJobStatus.QUEUED,
             source_type=InspectionSourceType.VIDEO,
             asset=asset,
+            video_processing=VideoJobProcessingParams(sample_fps=sample_fps, max_frames=max_frames),
             created_at=now,
             updated_at=now,
         )
@@ -278,6 +292,43 @@ class InspectionJobService:
         payload = json.loads(path.read_text(encoding="utf-8"))
         return InspectionJobResponse.model_validate(payload)
 
+    def list_jobs(self) -> list[InspectionJobResponse]:
+        if not self.jobs_dir.exists():
+            return []
+
+        jobs: list[InspectionJobResponse] = []
+        for path in sorted(self.jobs_dir.glob("job-*/job.json")):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                jobs.append(InspectionJobResponse.model_validate(payload))
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+        return jobs
+
+    def list_video_jobs(
+        self,
+        statuses: Iterable[InspectionJobStatus] | None = None,
+    ) -> list[InspectionJobResponse]:
+        status_filter = set(statuses) if statuses is not None else None
+        return [
+            job
+            for job in self.list_jobs()
+            if job.source_type == InspectionSourceType.VIDEO
+            and (status_filter is None or job.status in status_filter)
+        ]
+
+    def mark_job_failed(self, job_id: str, error: str) -> InspectionJobResponse:
+        job = self.get_job(job_id)
+        failed = job.model_copy(
+            update={
+                "status": InspectionJobStatus.FAILED,
+                "error": error,
+                "updated_at": utc_now(),
+            }
+        )
+        self._write(failed)
+        return failed
+
     def _write(self, job: InspectionJobResponse) -> None:
         job_dir = self._job_dir(job.job_id)
         job_dir.mkdir(parents=True, exist_ok=True)
@@ -324,6 +375,56 @@ class InspectionJobService:
                 "storage_path": relative_path.as_posix(),
                 "size_bytes": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest(),
+            }
+        )
+        return updated_asset, destination
+
+    def _save_asset_streaming(
+        self,
+        job_dir: Path,
+        asset: InspectionAsset,
+        filename: str,
+        file_obj: BinaryIO,
+        max_bytes: int,
+        chunk_size: int = DEFAULT_ASSET_STREAM_CHUNK_BYTES,
+    ) -> tuple[InspectionAsset, Path]:
+        original_name = Path(filename).name
+        safe_stem = re.sub(r"[^a-zA-Z0-9._-]+", "-", Path(original_name).stem).strip(".-")
+        safe_stem = safe_stem[:80] or "inspection-upload"
+        suffix = ASSET_SUFFIX_BY_MEDIA_TYPE.get(asset.media_type or "", Path(original_name).suffix.lower()[:12])
+        asset_filename = f"{asset.asset_id}-{safe_stem}{suffix}"
+        relative_path = Path("assets") / asset_filename
+        destination = job_dir / relative_path
+        assert_within_directory(destination=destination, directory=job_dir)
+
+        digest = hashlib.sha256()
+        total_bytes = 0
+        tmp_path = destination.with_suffix(f"{destination.suffix}.tmp")
+        assert_within_directory(destination=tmp_path, directory=job_dir)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with tmp_path.open("wb") as handle:
+                while True:
+                    chunk = file_obj.read(chunk_size)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > max_bytes:
+                        raise ValueError(f"Upload exceeds the {max_bytes} byte limit.")
+                    digest.update(chunk)
+                    handle.write(chunk)
+            tmp_path.replace(destination)
+        except Exception:
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
+
+        updated_asset = asset.model_copy(
+            update={
+                "storage_path": relative_path.as_posix(),
+                "size_bytes": total_bytes,
+                "sha256": digest.hexdigest(),
             }
         )
         return updated_asset, destination

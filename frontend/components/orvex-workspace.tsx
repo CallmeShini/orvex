@@ -31,6 +31,8 @@ import {
 const navItems = ["Overview", "Inspections", "Assets", "Reports", "Datasets", "Audit"];
 const allowedImageTypes = ["image/jpeg", "image/png", "image/webp", "image/tiff"];
 const allowedVideoTypes = ["video/mp4", "video/quicktime", "video/webm"];
+const videoUploadEnabled = process.env.NEXT_PUBLIC_ORVEX_ENABLE_VIDEO_UPLOAD === "true";
+const acceptedUploadTypes = videoUploadEnabled ? [...allowedImageTypes, ...allowedVideoTypes] : allowedImageTypes;
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -65,7 +67,7 @@ export function OrvexWorkspace() {
     [samples, selectedName]
   );
   const demoSamples = useMemo(() => samples.filter((sample) => sample.is_demo), [samples]);
-  const uploadedIsVideo = Boolean(uploadedFile && allowedVideoTypes.includes(uploadedFile.type));
+  const uploadedIsVideo = Boolean(videoUploadEnabled && uploadedFile && allowedVideoTypes.includes(uploadedFile.type));
   const visualUrl = uploadedPreviewUrl ?? selectedImageUrl;
   const thermalizeVisual = Boolean(
     !uploadedPreviewUrl && selectedSample?.dataset === "RaptorMaps InfraredSolarModules"
@@ -164,8 +166,17 @@ export function OrvexWorkspace() {
       return;
     }
 
-    if (![...allowedImageTypes, ...allowedVideoTypes].includes(file.type)) {
-      setError("Unsupported upload type. Use JPEG, PNG, WebP, TIFF, MP4, MOV, or WebM.");
+    if (allowedVideoTypes.includes(file.type) && !videoUploadEnabled) {
+      setError("Video upload is disabled in this build. Use the offline video evidence pipeline.");
+      return;
+    }
+
+    if (!acceptedUploadTypes.includes(file.type)) {
+      setError(
+        videoUploadEnabled
+          ? "Unsupported upload type. Use JPEG, PNG, WebP, TIFF, MP4, MOV, or WebM."
+          : "Unsupported upload type. Use JPEG, PNG, WebP, or TIFF."
+      );
       return;
     }
 
@@ -193,7 +204,7 @@ export function OrvexWorkspace() {
     const body = new FormData();
     if (uploadedFile) {
       body.append("file", uploadedFile);
-      if (allowedVideoTypes.includes(uploadedFile.type)) {
+      if (videoUploadEnabled && allowedVideoTypes.includes(uploadedFile.type)) {
         body.append("sample_fps", "1");
         body.append("max_frames", "48");
       }
@@ -282,6 +293,7 @@ export function OrvexWorkspace() {
                 setError(null);
               }}
               uploadedFile={uploadedFile}
+              videoUploadEnabled={videoUploadEnabled}
             />
 
             <InspectionCanvas
@@ -421,9 +433,14 @@ type InputPanelProps = {
   selectedSample: SampleInfo | null;
   setSelectedName: (name: string) => void;
   uploadedFile: File | null;
+  videoUploadEnabled: boolean;
 };
 
 function InputPanel(props: InputPanelProps) {
+  const accept = props.videoUploadEnabled
+    ? "image/jpeg,image/png,image/webp,image/tiff,video/mp4,video/quicktime,video/webm"
+    : "image/jpeg,image/png,image/webp,image/tiff";
+
   return (
     <motion.section
       animate={{ opacity: 1, y: 0 }}
@@ -451,12 +468,20 @@ function InputPanel(props: InputPanelProps) {
           Image
         </button>
         <button
-          className="inline-flex items-center justify-center gap-2 rounded-[7px] border border-[#bdddc8] bg-[#e8f5ed] px-3 py-2 text-sm font-medium text-[#256d3f]"
-          title="Bounded video frame analysis"
+          className={`inline-flex items-center justify-center gap-2 rounded-[7px] border px-3 py-2 text-sm font-medium ${
+            props.videoUploadEnabled
+              ? "border-[#bdddc8] bg-[#e8f5ed] text-[#256d3f]"
+              : "cursor-not-allowed border-[#d9d8d1] bg-[#f0efea] text-[#858a81]"
+          }`}
+          title={
+            props.videoUploadEnabled
+              ? "Experimental bounded frame triage. Human review required."
+              : "Offline video evidence pipeline planned for public upload."
+          }
           type="button"
         >
           <VideoCamera size={16} />
-          Video
+          {props.videoUploadEnabled ? "Video experimental" : "Video planned"}
         </button>
       </div>
 
@@ -468,12 +493,16 @@ function InputPanel(props: InputPanelProps) {
         onDragOver={props.onDragOver}
         onDrop={props.onDrop}
       >
-        <input accept="image/jpeg,image/png,image/webp,image/tiff,video/mp4,video/quicktime,video/webm" className="hidden" onChange={props.onFileInput} type="file" />
+        <input accept={accept} className="hidden" onChange={props.onFileInput} type="file" />
         <UploadSimple className="text-[#2f8f5b]" size={30} weight="duotone" />
         <span className="mt-3 text-sm font-medium text-[#171a16]">
-          {props.uploadedFile ? props.uploadedFile.name : "Drop image or video here"}
+          {props.uploadedFile ? props.uploadedFile.name : props.videoUploadEnabled ? "Drop image or experimental video here" : "Drop image here or browse"}
         </span>
-        <span className="mt-1 text-xs text-[#687066]">JPEG, PNG, WebP, TIFF, MP4, MOV or WebM.</span>
+        <span className="mt-1 text-xs text-[#687066]">
+          {props.videoUploadEnabled
+            ? "JPEG, PNG, WebP, TIFF, MP4, MOV or WebM. Video extracts bounded frames for review."
+            : "JPEG, PNG, WebP or TIFF. Video remains in the offline evidence pipeline."}
+        </span>
       </label>
 
       {props.uploadedFile ? (

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -12,6 +14,7 @@ from app.ml.video_pipeline import (
     build_ffmpeg_extract_command,
     discover_extracted_frames,
     percentile,
+    resolve_ffmpeg_bin,
 )
 
 
@@ -47,7 +50,7 @@ def test_build_ffmpeg_extract_command_is_bounded_and_deterministic(tmp_path: Pat
     )
 
     assert command == [
-        "ffmpeg",
+        resolve_ffmpeg_bin("ffmpeg"),
         "-hide_banner",
         "-loglevel",
         "error",
@@ -60,6 +63,29 @@ def test_build_ffmpeg_extract_command_is_bounded_and_deterministic(tmp_path: Pat
         "12",
         str(tmp_path / "frames" / "frame-%06d.jpg"),
     ]
+
+
+def test_resolve_ffmpeg_bin_uses_explicit_env_path(monkeypatch) -> None:
+    monkeypatch.setenv("ORVEX_FFMPEG_BIN", "/opt/ffmpeg/bin/ffmpeg")
+
+    assert resolve_ffmpeg_bin("ffmpeg") == "/opt/ffmpeg/bin/ffmpeg"
+
+
+def test_resolve_ffmpeg_bin_prefers_path_ffmpeg(monkeypatch) -> None:
+    monkeypatch.delenv("ORVEX_FFMPEG_BIN", raising=False)
+    monkeypatch.setattr("app.ml.video_pipeline.shutil.which", lambda command: "/usr/bin/ffmpeg")
+
+    assert resolve_ffmpeg_bin("ffmpeg") == "ffmpeg"
+
+
+def test_resolve_ffmpeg_bin_falls_back_to_venv_package(monkeypatch) -> None:
+    fake_module = types.ModuleType("imageio_ffmpeg")
+    fake_module.get_ffmpeg_exe = lambda: "/workspace/orvex/.venv/bin/imageio-ffmpeg"
+    monkeypatch.delenv("ORVEX_FFMPEG_BIN", raising=False)
+    monkeypatch.setattr("app.ml.video_pipeline.shutil.which", lambda command: None)
+    monkeypatch.setitem(sys.modules, "imageio_ffmpeg", fake_module)
+
+    assert resolve_ffmpeg_bin("ffmpeg") == "/workspace/orvex/.venv/bin/imageio-ffmpeg"
 
 
 def test_discover_extracted_frames_assigns_timestamps(tmp_path: Path) -> None:

@@ -124,6 +124,39 @@ def test_local_vlm_mode_reuses_default_client(monkeypatch: pytest.MonkeyPatch) -
     assert instances[0].calls == 2
 
 
+def test_local_vlm_mode_fills_missing_conservative_review_fields() -> None:
+    fake_client = FakeLocalVLMClient(
+        json.dumps(
+            {
+                "image_modality": "infrared",
+                "contains_solar_panel": True,
+                "inspection_confidence": 0.62,
+                "overall_risk_score": 0.41,
+                "priority": "medium",
+                "findings": [
+                    {
+                        "defect_type": "soiling",
+                        "severity": "medium",
+                        "confidence": 0.58,
+                        "location_hint": "lower module area",
+                        "visual_evidence": "possible surface obstruction",
+                        "recommended_action": "route to technician review",
+                    }
+                ],
+            }
+        )
+    )
+
+    result = OrvexAIService(mode="local", local_vlm_client=fake_client).analyze_image(
+        filename="uploaded-panel.jpg",
+        file_obj=BytesIO(b"fake image bytes"),
+    )
+
+    assert result.human_review_required is True
+    assert result.summary == "Possible soiling pattern with medium priority requires human review."
+    assert result.priority == "medium"
+
+
 def test_local_vlm_mode_rejects_invalid_json() -> None:
     fake_client = FakeLocalVLMClient("not-json")
 

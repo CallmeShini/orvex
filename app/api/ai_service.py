@@ -165,6 +165,7 @@ class OrvexAIService:
         try:
             raw_output = client.analyze(image_path=image_path, prompt=prompt)
             payload = extract_json_object(raw_output)
+            payload = normalize_local_vlm_payload(payload)
             payload.setdefault("inspection_id", sample_name or f"orvex-local-{int(time.time())}")
             payload["raw_model_output"] = raw_output
             payload["model_mode"] = self.mode
@@ -292,3 +293,28 @@ class OrvexAIService:
         with destination.open("wb") as handle:
             handle.write(file_obj.read())
         return destination
+
+
+def normalize_local_vlm_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    normalized.setdefault("human_review_required", True)
+    if not normalized.get("summary"):
+        normalized["summary"] = build_local_vlm_summary(normalized)
+    return normalized
+
+
+def build_local_vlm_summary(payload: dict[str, Any]) -> str:
+    if payload.get("contains_solar_panel") is False:
+        return "The image does not clearly show a photovoltaic module and requires human review."
+
+    priority = str(payload.get("priority") or "inconclusive")
+    findings = payload.get("findings")
+    if isinstance(findings, list) and findings:
+        first_finding = findings[0] if isinstance(findings[0], dict) else {}
+        defect_type = str(first_finding.get("defect_type") or "visual anomaly")
+        return f"Possible {defect_type} pattern with {priority} priority requires human review."
+
+    if priority == "inconclusive":
+        return "The inspection could not identify a reliable defect pattern and requires human review."
+
+    return f"The local VLM returned {priority} triage priority and requires human review."

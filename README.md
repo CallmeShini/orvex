@@ -138,7 +138,14 @@ GET /inspection-jobs/{job_id}
 
 `POST /inspection-jobs` currently processes image or curated-sample jobs synchronously and returns a completed job envelope with the same validated `InspectionResult` used by `/analyze`.
 
-The legacy `/analyze` endpoint remains available for compatibility with older demo clients. Video files are still intentionally rejected by the public API/UI. The repository now has an offline frame-evaluation pipeline for controlled VPS evidence runs, but that is not public video-upload support.
+The legacy `/analyze` endpoint remains available for compatibility with older demo clients. Video upload is disabled by default in the public API/UI. The repository has an offline frame-evaluation pipeline for controlled VPS evidence runs, and the API can enable experimental bounded video jobs only with explicit flags:
+
+```bash
+ORVEX_ENABLE_VIDEO_UPLOAD=true
+ORVEX_VIDEO_PROCESSING_MODE=background
+```
+
+That mode uses FastAPI `BackgroundTasks` in the API process and is not a durable worker queue.
 
 ### Legacy Streamlit UI
 
@@ -302,4 +309,4 @@ AI_MODE=local ORVEX_MAX_NEW_TOKENS=700 \
   --torch-smoke
 ```
 
-Claim boundary: this is offline frame evaluation with human review required. It does not mean the Next.js UI or FastAPI API accepts arbitrary video uploads yet.
+Claim boundary: this is offline frame evaluation with human review required. Experimental API video upload is disabled by default and, when explicitly enabled, means bounded frame triage only. It does not mean arbitrary public video ingestion, production diagnostic accuracy, or autonomous maintenance decisions.

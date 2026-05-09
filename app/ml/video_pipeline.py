@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import shutil
 import subprocess
 from collections import Counter
@@ -98,7 +99,14 @@ def build_ffmpeg_extract_command(
 
 
 def resolve_ffmpeg_bin(ffmpeg_bin: str = "ffmpeg") -> str:
-    if ffmpeg_bin != "ffmpeg" or shutil.which(ffmpeg_bin):
+    configured_bin = os.getenv("ORVEX_FFMPEG_BIN")
+    if ffmpeg_bin == "ffmpeg" and configured_bin:
+        return configured_bin
+
+    if ffmpeg_bin != "ffmpeg":
+        return ffmpeg_bin
+
+    if shutil.which(ffmpeg_bin):
         return ffmpeg_bin
 
     try:

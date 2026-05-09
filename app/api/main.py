@@ -36,15 +36,32 @@ ALLOWED_VIDEO_CONTENT_TYPES = {
     "video/webm",
 }
 DEFAULT_MAX_UPLOAD_BYTES = 15 * 1024 * 1024
-DEFAULT_MAX_VIDEO_UPLOAD_BYTES = 250 * 1024 * 1024
+DEFAULT_MAX_VIDEO_UPLOAD_BYTES = 50 * 1024 * 1024
 DEFAULT_VIDEO_FPS = 1.0
 DEFAULT_VIDEO_MAX_FRAMES = 48
+VIDEO_PROCESSING_MODE_DISABLED = "disabled"
+VIDEO_PROCESSING_MODE_BACKGROUND = "background"
 
 
 def cors_origins() -> list[str]:
     configured = os.getenv("ORVEX_CORS_ORIGINS", "")
     extra_origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
     return [*DEFAULT_CORS_ORIGINS, *extra_origins]
+
+
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def video_upload_enabled() -> bool:
+    return env_flag("ORVEX_ENABLE_VIDEO_UPLOAD", default=False)
+
+
+def video_processing_mode() -> str:
+    return os.getenv("ORVEX_VIDEO_PROCESSING_MODE", VIDEO_PROCESSING_MODE_DISABLED).lower()
 
 
 app = FastAPI(
@@ -135,6 +152,16 @@ async def create_inspection_job(
 
     job_service = get_job_service()
     if file is not None and file.content_type in ALLOWED_VIDEO_CONTENT_TYPES:
+        if not video_upload_enabled():
+            raise HTTPException(
+                status_code=415,
+                detail="Video upload is disabled in this build. Use the offline video evidence pipeline.",
+            )
+        if video_processing_mode() != VIDEO_PROCESSING_MODE_BACKGROUND:
+            raise HTTPException(
+                status_code=503,
+                detail="Video upload is enabled, but no video processing mode is active.",
+            )
         if sample_fps <= 0 or sample_fps > 2:
             raise HTTPException(status_code=422, detail="sample_fps must be greater than 0 and at most 2.")
         if max_frames <= 0 or max_frames > 120:
@@ -144,6 +171,7 @@ async def create_inspection_job(
             filename=file.filename or "inspection-video",
             media_type=file.content_type or "application/octet-stream",
             file_obj=file.file,
+            max_bytes=int(os.getenv("ORVEX_MAX_VIDEO_UPLOAD_BYTES", str(DEFAULT_MAX_VIDEO_UPLOAD_BYTES))),
         )
         background_tasks.add_task(
             job_service.process_video_job,
@@ -190,6 +218,11 @@ def validate_job_upload(file: UploadFile) -> None:
         return
 
     if file.content_type in ALLOWED_VIDEO_CONTENT_TYPES:
+        if not video_upload_enabled():
+            raise HTTPException(
+                status_code=415,
+                detail="Video upload is disabled in this build. Use the offline video evidence pipeline.",
+            )
         validate_upload_size(
             file,
             max_bytes=int(os.getenv("ORVEX_MAX_VIDEO_UPLOAD_BYTES", str(DEFAULT_MAX_VIDEO_UPLOAD_BYTES))),

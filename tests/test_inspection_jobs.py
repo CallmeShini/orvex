@@ -66,7 +66,54 @@ def test_create_inspection_job_requires_input(tmp_path: Path, monkeypatch) -> No
     assert "sample_name or an image/video file" in response.json()["detail"]
 
 
+def test_create_inspection_job_rejects_video_when_upload_flag_disabled(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("ORVEX_ENABLE_VIDEO_UPLOAD", raising=False)
+    monkeypatch.setattr("app.api.main.get_job_service", lambda: InspectionJobService(jobs_dir=tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/inspection-jobs",
+        files={"file": ("inspection.mp4", b"fake video bytes", "video/mp4")},
+    )
+
+    assert response.status_code == 415
+    assert "Video upload is disabled" in response.json()["detail"]
+
+
+def test_create_inspection_job_rejects_video_when_processing_mode_disabled(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ORVEX_ENABLE_VIDEO_UPLOAD", "true")
+    monkeypatch.delenv("ORVEX_VIDEO_PROCESSING_MODE", raising=False)
+    monkeypatch.setattr("app.api.main.get_job_service", lambda: InspectionJobService(jobs_dir=tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/inspection-jobs",
+        files={"file": ("inspection.mp4", b"fake video bytes", "video/mp4")},
+    )
+
+    assert response.status_code == 503
+    assert "no video processing mode is active" in response.json()["detail"]
+
+
+def test_create_inspection_job_rejects_oversized_video(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ORVEX_ENABLE_VIDEO_UPLOAD", "true")
+    monkeypatch.setenv("ORVEX_VIDEO_PROCESSING_MODE", "background")
+    monkeypatch.setenv("ORVEX_MAX_VIDEO_UPLOAD_BYTES", "3")
+    monkeypatch.setattr("app.api.main.get_job_service", lambda: InspectionJobService(jobs_dir=tmp_path))
+    client = TestClient(app)
+
+    response = client.post(
+        "/inspection-jobs",
+        files={"file": ("inspection.mp4", b"fake video bytes", "video/mp4")},
+    )
+
+    assert response.status_code == 413
+    assert "3 byte limit" in response.json()["detail"]
+
+
 def test_create_inspection_job_accepts_video_and_queues_processing(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ORVEX_ENABLE_VIDEO_UPLOAD", "true")
+    monkeypatch.setenv("ORVEX_VIDEO_PROCESSING_MODE", "background")
     monkeypatch.setattr("app.api.main.get_job_service", lambda: InspectionJobService(jobs_dir=tmp_path))
     monkeypatch.setattr("app.api.job_service.InspectionJobService.process_video_job", lambda *args, **kwargs: None)
     client = TestClient(app)
@@ -97,6 +144,7 @@ def test_process_video_job_writes_aggregate_result(tmp_path: Path, monkeypatch) 
         filename="inspection.mp4",
         media_type="video/mp4",
         file_obj=BytesReader(b"fake video bytes"),
+        max_bytes=1024,
     )
 
     completed = service.process_video_job(job.job_id, ai_service=OrvexAIService())
@@ -122,6 +170,12 @@ class BytesReader:
         self.payload = payload
         self.position = 0
 
-    def read(self) -> bytes:
-        self.position = len(self.payload)
-        return self.payload
+    def read(self, size: int = -1) -> bytes:
+        if self.position >= len(self.payload):
+            return b""
+        if size < 0:
+            size = len(self.payload) - self.position
+        end_position = min(self.position + size, len(self.payload))
+        chunk = self.payload[self.position : end_position]
+        self.position = end_position
+        return chunk

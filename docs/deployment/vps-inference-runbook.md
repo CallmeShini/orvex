@@ -124,9 +124,28 @@ AI_MODE=local ORVEX_MAX_NEW_TOKENS=700 \
 
 ## Offline Video Evidence Run
 
-Public video upload remains disabled. Use this path only for controlled local files on the VPS.
+The offline path is still the recommended VPS evidence run because it captures ROCm/MI300X runtime proof. API video upload is disabled by default and should only be enabled for explicit experimental bounded-frame tests.
 
-Install `ffmpeg` if it is missing:
+Verify `ffmpeg` resolution. The app checks this order:
+
+```txt
+1. ORVEX_FFMPEG_BIN when set
+2. ffmpeg from PATH
+3. imageio-ffmpeg from the Python venv
+```
+
+```bash
+cd /workspace/orvex
+.venv/bin/python -c "from app.ml.video_pipeline import resolve_ffmpeg_bin; print(resolve_ffmpeg_bin())"
+```
+
+If the VPS has ffmpeg installed outside PATH:
+
+```bash
+export ORVEX_FFMPEG_BIN=/opt/ffmpeg/bin/ffmpeg
+```
+
+If using system `ffmpeg`, this should also work:
 
 ```bash
 ffmpeg -version
@@ -168,6 +187,17 @@ rg -n "MI300X|AMD Instinct|HIP|ROCm|gfx" "logs/evidence/${RUN_ID}/runtime_eviden
 Claim boundary:
 
 ```txt
-Offline video evidence run using timestamped frames and the Orvex inspection contract.
-Not public video ingestion, not production diagnostic accuracy, and not autonomous maintenance.
+Offline video evidence and experimental bounded video jobs use timestamped frames and the Orvex inspection contract.
+Not arbitrary unbounded public video ingestion, not production diagnostic accuracy,
+and not autonomous maintenance.
+```
+
+Experimental API video smoke test:
+
+```bash
+ORVEX_ENABLE_VIDEO_UPLOAD=true \
+ORVEX_VIDEO_PROCESSING_MODE=background \
+AI_MODE=classifier \
+ORVEX_CLASSIFIER_ARTIFACT=data/models/raptormaps_classifier.pt \
+  .venv/bin/uvicorn app.api.main:app --host 127.0.0.1 --port 8010
 ```

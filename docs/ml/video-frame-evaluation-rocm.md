@@ -4,7 +4,7 @@ Updated: 2026-05-08
 
 This runbook defines Orvex's controlled video path for the AMD hackathon.
 
-It is not public video-upload support. It is an offline evidence pipeline for local video files on the MI300X VPS.
+The same frame pipeline can be used by `/inspection-jobs` for experimental bounded video uploads, but that path is disabled by default. This document remains the recommended VPS evidence runbook for controlled local video files and ROCm/MI300X proof.
 
 ## Objective
 
@@ -29,6 +29,37 @@ scripts/extract_video_frames.py
 scripts/evaluate_video_frames.py
 scripts/evaluate_video_offline.py
 scripts/capture_runtime_evidence.py
+```
+
+## ffmpeg on VPS
+
+The pipeline needs `ffmpeg`. It can come from either:
+
+```txt
+1. system ffmpeg available on PATH; or
+2. imageio-ffmpeg installed in the Python venv; or
+3. an explicit ORVEX_FFMPEG_BIN path.
+```
+
+The code resolves this automatically through `app.ml.video_pipeline.resolve_ffmpeg_bin`.
+
+Verify it on the VPS:
+
+```bash
+cd /workspace/orvex
+.venv/bin/python -c "from app.ml.video_pipeline import resolve_ffmpeg_bin; print(resolve_ffmpeg_bin())"
+```
+
+If the VPS keeps ffmpeg outside PATH, set:
+
+```bash
+export ORVEX_FFMPEG_BIN=/opt/ffmpeg/bin/ffmpeg
+```
+
+If system ffmpeg is preferred:
+
+```bash
+ffmpeg -version
 ```
 
 ## Output Layout
@@ -96,7 +127,13 @@ AI_MODE=classifier ORVEX_CLASSIFIER_ARTIFACT=data/models/raptormaps_classifier.p
 Local unit tests:
 
 ```bash
-.venv/bin/pytest tests/test_video_pipeline.py tests/test_runtime_evidence.py tests/test_evaluate_video_offline.py
+.venv/bin/pytest tests/test_video_pipeline.py tests/test_runtime_evidence.py tests/test_evaluate_video_offline.py tests/test_inspection_jobs.py
+```
+
+API smoke test after the service is running:
+
+```bash
+curl http://127.0.0.1:8000/health
 ```
 
 Evidence checks on the VPS:
@@ -115,26 +152,36 @@ Allowed:
 Orvex has an offline video evidence pipeline that extracts timestamped frames,
 runs the existing inspection contract per frame, aggregates triage signals,
 and records ROCm/MI300X runtime evidence.
+Orvex can run experimental bounded video jobs through POST /inspection-jobs when explicit flags are enabled.
 ```
 
 Not allowed:
 
 ```txt
-Orvex supports arbitrary public video uploads.
+Orvex supports arbitrary unbounded public video uploads.
 Orvex provides production diagnostic accuracy.
 Orvex replaces field technicians or automates maintenance decisions.
 ```
 
-## Next Integration Step
+## Experimental API Integration
 
-Only after one clean MI300X run should video move toward the public API:
+The public job endpoint rejects video by default. To enable experimental bounded video jobs locally:
+
+```bash
+ORVEX_ENABLE_VIDEO_UPLOAD=true
+ORVEX_VIDEO_PROCESSING_MODE=background
+```
+
+With those flags, the job endpoint uses this shape:
 
 ```txt
 POST /inspection-jobs
 -> store video asset with strict limits
--> enqueue async worker
+-> enqueue background task
 -> extract bounded frames
 -> write frame assets and frame results
 -> aggregate final job.result
 -> expose job polling and reviewable evidence
 ```
+
+For production-grade VPS workloads, replace FastAPI `BackgroundTasks` with a durable worker queue.

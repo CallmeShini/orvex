@@ -4,7 +4,7 @@ Updated: 2026-05-08
 
 The inspection job API is the production-compatible path for Orvex ingestion.
 
-It keeps the existing `InspectionResult` contract, but wraps execution in a job envelope so image analysis, future video processing, queueing, and review workflows can share one shape.
+It keeps the existing `InspectionResult` contract, but wraps execution in a job envelope so image analysis, bounded video frame processing, queueing, and review workflows can share one shape.
 
 ## Endpoints
 
@@ -17,12 +17,14 @@ GET /inspection-jobs/{job_id}
 
 ```txt
 sample_name: optional form string
-file: optional image file
+file: optional image file, or experimental video file when explicitly enabled
+sample_fps: optional video frame sampling rate
+max_frames: optional video frame cap
 ```
 
 Exactly one of these must be useful. If neither is provided, the API returns `422`.
 
-For this build, accepted upload types are:
+For this build, image upload types are always accepted:
 
 ```txt
 image/jpeg
@@ -31,9 +33,22 @@ image/webp
 image/tiff
 ```
 
-Video uploads return `415` with an explicit message that the public API is image-only.
-An offline frame-evaluation pipeline exists for controlled VPS evidence runs, but it is not wired
-to this endpoint yet.
+Video upload types are disabled by default and only accepted when both flags are set:
+
+```bash
+ORVEX_ENABLE_VIDEO_UPLOAD=true
+ORVEX_VIDEO_PROCESSING_MODE=background
+```
+
+Experimental video content types:
+
+```txt
+video/mp4
+video/quicktime
+video/webm
+```
+
+Video uploads are accepted by `/inspection-jobs` only in this explicit experimental mode. The legacy `/analyze` endpoint remains image-only.
 
 ## Current Execution Model
 
@@ -51,7 +66,21 @@ request
 -> return completed job
 ```
 
-This intentionally avoids adding a queue, database, or worker process before the product needs it.
+Experimental video jobs are created quickly and processed with FastAPI `BackgroundTasks`:
+
+```txt
+request
+-> create queued job
+-> persist uploaded video asset
+-> return job_id
+-> extract bounded frames with ffmpeg
+-> run OrvexAIService on each frame
+-> aggregate frame results into video_result
+-> persist video_evaluation.json
+-> update job to completed or failed
+```
+
+This intentionally avoids adding a database or external queue before the product needs it. `BackgroundTasks` runs in the API process and is not durable; for heavier VPS workloads, replace it with a real worker queue.
 
 ## Filesystem Layout
 
@@ -60,6 +89,9 @@ Job data is stored under ignored local filesystem paths:
 ```txt
 data/jobs/{job_id}/job.json
 data/jobs/{job_id}/assets/{asset_id}-{safe_filename}
+data/jobs/{job_id}/assets/frames/frame-000001.jpg
+data/jobs/{job_id}/results/frames_manifest.json
+data/jobs/{job_id}/results/video_evaluation.json
 data/jobs/{job_id}/results/{inspection_id}.json
 data/reports/{inspection_id}.md
 ```
@@ -86,6 +118,7 @@ data/reports/{inspection_id}.md
     "timestamp_ms": null
   },
   "result": {},
+  "video_result": null,
   "report_id": "orvex-...",
   "report_markdown": "...",
   "error": null,
@@ -110,25 +143,32 @@ The Next.js UI now uses `/inspection-jobs`, but older demo clients can keep usin
 - Asset filenames are generated from server-side IDs.
 - Uploaded assets are scoped under `data/jobs/{job_id}/assets`.
 - Job metadata is loaded by `job_id`, not by arbitrary file paths.
-- Non-image uploads are rejected.
-- Upload size is controlled by `ORVEX_MAX_UPLOAD_BYTES`.
+- Unsupported uploads are rejected.
+- Image upload size is controlled by `ORVEX_MAX_UPLOAD_BYTES`.
+- Video upload is disabled unless `ORVEX_ENABLE_VIDEO_UPLOAD=true`.
+- Experimental video processing requires `ORVEX_VIDEO_PROCESSING_MODE=background`.
+- Video upload size is controlled by `ORVEX_MAX_VIDEO_UPLOAD_BYTES`; the default is intentionally conservative.
+- Video sampling is bounded by `sample_fps <= 2` and `max_frames <= 120`.
 
 ## Video Boundary
 
 Allowed claim:
 
 ```txt
-Orvex has a job-shaped API foundation for image inspections and an offline frame-evaluation
-pipeline for controlled video evidence runs.
+Orvex has an offline video evidence pipeline, and can run experimental bounded video jobs when
+explicitly enabled. Both paths extract frames, apply the existing inspection contract per frame,
+and aggregate triage signals for human review.
 ```
 
-Not allowed yet:
+Still not allowed:
 
 ```txt
-Orvex supports video inspection.
+Orvex performs production-grade temporal video understanding.
+Orvex supports arbitrary unbounded public video uploads.
+Orvex replaces field technicians or automates maintenance decisions.
 ```
 
-Public video support still needs a separate implementation:
+The current video path is frame-based:
 
 ```txt
 video asset
@@ -136,11 +176,11 @@ video asset
 -> per-frame analysis
 -> timestamped evidence
 -> aggregation policy
--> asynchronous worker/job status
+-> experimental background task/job status
 -> reviewable report
 ```
 
-The current offline pipeline lives outside the API:
+The offline evidence pipeline remains available for controlled VPS runs:
 
 ```txt
 scripts/evaluate_video_offline.py

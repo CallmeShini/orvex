@@ -3,23 +3,28 @@
 import {
   ArrowClockwise,
   CheckCircle,
+  CircleNotch,
+  ClipboardText,
   Cpu,
   FileArrowDown,
   FileText,
   Gauge,
+  HourglassMedium,
   ImageSquare,
   Pulse,
   ShieldCheck,
   Stack,
   UploadSimple,
   VideoCamera,
-  WarningOctagon
+  WarningOctagon,
+  XCircle
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChangeEvent, DragEvent, useEffect, useMemo, useState } from "react";
 import {
   AnalyzeResponse,
   HealthResponse,
+  InspectionJobStatus,
   InspectionJobResponse,
   InspectionResult,
   SampleInfo,
@@ -30,6 +35,8 @@ import {
 
 const navItems = ["Overview", "Inspections", "Assets", "Reports", "Datasets", "Audit"];
 const allowedImageTypes = ["image/jpeg", "image/png", "image/webp", "image/tiff"];
+type ApiState = "idle" | "loading" | "error";
+type WorkspaceJobState = InspectionJobStatus | ApiState;
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -56,6 +63,7 @@ export function OrvexWorkspace() {
   const [inspectionJob, setInspectionJob] = useState<InspectionJobResponse | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
+  const [jobState, setJobState] = useState<WorkspaceJobState>("loading");
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +72,18 @@ export function OrvexWorkspace() {
     [samples, selectedName]
   );
   const demoSamples = useMemo(() => samples.filter((sample) => sample.is_demo), [samples]);
+  const quickSamples = useMemo(() => {
+    const normal =
+      samples.find((sample) => sample.name === "raptormaps-no_anomaly-10000") ??
+      samples.find((sample) => sample.priority === "low");
+    const anomalous =
+      samples.find((sample) => sample.name === "raptormaps-hot_spot-06722") ??
+      samples.find((sample) => ["high", "critical", "medium"].includes(sample.priority));
+    return [
+      normal ? { role: "normal" as const, sample: normal } : null,
+      anomalous ? { role: "anomalous" as const, sample: anomalous } : null
+    ].filter(Boolean) as { role: "normal" | "anomalous"; sample: SampleInfo }[];
+  }, [samples]);
   const visualUrl = uploadedPreviewUrl ?? selectedImageUrl;
   const thermalizeVisual = Boolean(
     !uploadedPreviewUrl && selectedSample?.dataset === "RaptorMaps InfraredSolarModules"
@@ -91,8 +111,10 @@ export function OrvexWorkspace() {
           sampleResponse.find((sample) => sample.name === "raptormaps-hot_spot-06722") ??
           sampleResponse.find((sample) => sample.is_demo);
         setSelectedName(preferredDemo?.name ?? sampleResponse[0]?.name ?? "");
+        setJobState("idle");
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Could not load Orvex API.");
+        setJobState("error");
       } finally {
         if (!cancelled) {
           setLoadingData(false);
@@ -175,6 +197,7 @@ export function OrvexWorkspace() {
     setUploadedFile(file);
     setAnalysis(null);
     setInspectionJob(null);
+    setJobState("idle");
     setError(null);
   }
 
@@ -191,6 +214,7 @@ export function OrvexWorkspace() {
 
   async function runAnalysis() {
     setAnalyzing(true);
+    setJobState("queued");
     setError(null);
 
     const body = new FormData();
@@ -201,11 +225,15 @@ export function OrvexWorkspace() {
     }
 
     try {
+      window.setTimeout(() => {
+        setJobState((current) => (current === "queued" ? "processing" : current));
+      }, 250);
       const job = await fetchJson<InspectionJobResponse>("/api/orvex/inspection-jobs", {
         method: "POST",
         body
       });
       setInspectionJob(job);
+      setJobState(job.status);
       if (job.result) {
         setAnalysis({
           result: job.result,
@@ -217,9 +245,11 @@ export function OrvexWorkspace() {
       }
       if (job.error) {
         setError(job.error);
+        setJobState("failed");
       }
     } catch (analysisError) {
       setError(analysisError instanceof Error ? analysisError.message : "Analysis failed.");
+      setJobState("error");
     } finally {
       setAnalyzing(false);
     }
@@ -230,6 +260,7 @@ export function OrvexWorkspace() {
     setUploadedPreviewUrl(null);
     setAnalysis(null);
     setInspectionJob(null);
+    setJobState("idle");
     setError(null);
   }
 
@@ -256,6 +287,7 @@ export function OrvexWorkspace() {
               }}
               onDrop={handleDrop}
               onFileInput={handleFileInput}
+              quickSamples={quickSamples}
               samples={samples}
               selectedName={selectedName}
               selectedSample={selectedSample}
@@ -264,6 +296,7 @@ export function OrvexWorkspace() {
                 setUploadedFile(null);
                 setAnalysis(null);
                 setInspectionJob(null);
+                setJobState("idle");
                 setError(null);
               }}
               uploadedFile={uploadedFile}
@@ -281,6 +314,7 @@ export function OrvexWorkspace() {
               analysis={analysis}
               health={health}
               inspectionJob={inspectionJob}
+              jobState={jobState}
               loading={analyzing}
               selectedSample={selectedSample}
             />
@@ -367,11 +401,12 @@ function TopBar({ health, loading }: { health: HealthResponse | null; loading: b
           <Meta label="Runtime" value={health?.ai_mode ?? "pending"} />
           <Meta label="Schema" value={health?.schema_version ?? "pending"} />
           <button
-            className="inline-flex items-center justify-center gap-2 rounded-[7px] border border-[#cfcfc7] bg-white px-3 py-2 text-sm font-medium text-[#171a16] transition hover:border-[#171a16] active:translate-y-[1px]"
+            className="inline-flex cursor-default items-center justify-center gap-2 rounded-[7px] border border-[#cfcfc7] bg-white px-3 py-2 text-sm font-medium text-[#4b544a]"
+            disabled
             type="button"
           >
             <FileArrowDown size={17} weight="duotone" />
-            Export report
+            Report available after analysis
           </button>
         </div>
       </div>
@@ -400,6 +435,7 @@ type InputPanelProps = {
   onDragOver: (event: DragEvent<HTMLLabelElement>) => void;
   onDrop: (event: DragEvent<HTMLLabelElement>) => void;
   onFileInput: (event: ChangeEvent<HTMLInputElement>) => void;
+  quickSamples: { role: "normal" | "anomalous"; sample: SampleInfo }[];
   samples: SampleInfo[];
   selectedName: string;
   selectedSample: SampleInfo | null;
@@ -432,7 +468,7 @@ function InputPanel(props: InputPanelProps) {
 
       <div className="mt-5 grid grid-cols-2 gap-2">
         <button className="rounded-[7px] bg-[#171a16] px-3 py-2 text-sm font-medium text-white" type="button">
-          Image
+          Analyze one image
         </button>
         <button
           className="inline-flex cursor-not-allowed items-center justify-center gap-2 rounded-[7px] border border-[#d9d8d1] bg-[#f0efea] px-3 py-2 text-sm font-medium text-[#858a81]"
@@ -440,8 +476,31 @@ function InputPanel(props: InputPanelProps) {
           type="button"
         >
           <VideoCamera size={16} />
-          Video planned
+          Video upload unavailable
         </button>
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-[#82887f]">Ready samples</div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
+          {props.quickSamples.map(({ role, sample }) => (
+            <button
+              className={`rounded-[8px] border p-3 text-left transition active:translate-y-[1px] ${
+                sample.name === props.selectedName && !props.uploadedFile
+                  ? "border-[#2f8f5b] bg-[#edf7f1]"
+                  : "border-[#deddd6] bg-white hover:border-[#a9aaa1]"
+              }`}
+              key={`${role}-${sample.name}`}
+              onClick={() => props.setSelectedName(sample.name)}
+              type="button"
+            >
+              <div className="text-sm font-semibold text-[#171a16]">
+                {role === "normal" ? "Use normal panel sample" : "Use anomalous panel sample"}
+              </div>
+              <div className="mt-1 truncate text-xs text-[#687066]">{displaySampleName(sample)}</div>
+            </button>
+          ))}
+        </div>
       </div>
 
       <label
@@ -455,9 +514,9 @@ function InputPanel(props: InputPanelProps) {
         <input accept="image/jpeg,image/png,image/webp,image/tiff" className="hidden" onChange={props.onFileInput} type="file" />
         <UploadSimple className="text-[#2f8f5b]" size={30} weight="duotone" />
         <span className="mt-3 text-sm font-medium text-[#171a16]">
-          {props.uploadedFile ? props.uploadedFile.name : "Drop image here or browse"}
+          {props.uploadedFile ? props.uploadedFile.name : "Upload solar panel image"}
         </span>
-        <span className="mt-1 text-xs text-[#687066]">JPEG, PNG, WebP or TIFF. Video is kept for the job pipeline.</span>
+        <span className="mt-1 text-xs text-[#687066]">Click to choose a JPEG, PNG, WebP, or TIFF, or drop the file here.</span>
       </label>
 
       {props.uploadedFile ? (
@@ -466,7 +525,7 @@ function InputPanel(props: InputPanelProps) {
           onClick={props.onClearUpload}
           type="button"
         >
-          Use curated samples instead
+          Clear upload and use curated samples
         </button>
       ) : null}
 
@@ -525,7 +584,7 @@ function InputPanel(props: InputPanelProps) {
         type="button"
       >
         {props.analyzing ? <Pulse className="animate-pulse" size={18} weight="duotone" /> : <Gauge size={18} weight="duotone" />}
-        {props.analyzing ? "Analyzing inspection" : "Analyze inspection"}
+        {props.analyzing ? "Running image analysis" : "Run analysis for selected image"}
       </button>
     </motion.section>
   );
@@ -630,18 +689,42 @@ function ResultInspector({
   analysis,
   health,
   inspectionJob,
+  jobState,
   loading,
   selectedSample
 }: {
   analysis: AnalyzeResponse | null;
   health: HealthResponse | null;
   inspectionJob: InspectionJobResponse | null;
+  jobState: WorkspaceJobState;
   loading: boolean;
   selectedSample: SampleInfo | null;
 }) {
   const result = analysis?.result ?? null;
   const priority = result?.priority ?? selectedSample?.priority ?? "inconclusive";
   const tone = priorityTone[priority];
+  const primaryFinding = result?.findings[0] ?? null;
+
+  function downloadReportJson() {
+    if (!analysis || !inspectionJob) {
+      return;
+    }
+    const payload = {
+      job_id: inspectionJob.job_id,
+      status: inspectionJob.status,
+      source_type: inspectionJob.source_type,
+      asset: inspectionJob.asset,
+      result: analysis.result,
+      report_markdown: analysis.report_markdown
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${inspectionJob.job_id}-orvex-report.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <motion.aside
@@ -653,8 +736,8 @@ function ResultInspector({
       <div className="border-b border-[#deddd6] p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold tracking-tight">AI fault triage</h2>
-            <p className="mt-1 text-sm text-[#687066]">Measured output, provisional decision.</p>
+            <h2 className="text-base font-semibold tracking-tight">Inspection result</h2>
+            <p className="mt-1 text-sm text-[#687066]">Provisional triage for human review.</p>
           </div>
           <span className={`rounded-full border px-2 py-1 text-xs font-medium ${tone.border} ${tone.bg} ${tone.text}`}>
             {tone.label}
@@ -662,17 +745,65 @@ function ResultInspector({
         </div>
       </div>
 
+      <JobStateBanner state={jobState} />
+
       <div className="grid grid-cols-2 border-b border-[#deddd6]">
-        <Metric label="Risk score" value={formatScore(result?.overall_risk_score)} />
-        <Metric label="Confidence" value={formatScore(result?.inspection_confidence)} />
+        <Metric label="Priority" value={tone.label} />
+        <Metric label="Risk level" value={formatScore(result?.overall_risk_score)} suffix={result ? "estimated" : undefined} />
       </div>
 
       <div className="border-b border-[#deddd6] p-4">
+        <h3 className="text-sm font-semibold">Main findings</h3>
+        {loading ? (
+          <div className="mt-3 space-y-2">
+            <div className="h-3 animate-pulse rounded-full bg-[#deddd6]" />
+            <div className="h-3 w-4/5 animate-pulse rounded-full bg-[#e7e5dd]" />
+            <div className="h-3 w-3/5 animate-pulse rounded-full bg-[#e7e5dd]" />
+          </div>
+        ) : result?.findings.length ? (
+          <ul className="mt-3 space-y-2 text-sm leading-5 text-[#4d554b]">
+            {result.findings.slice(0, 3).map((finding) => (
+              <li className="flex gap-2" key={`${finding.defect_type}-${finding.location_hint}`}>
+                <WarningOctagon className="mt-0.5 shrink-0 text-[#a44421]" size={16} weight="duotone" />
+                <span>{finding.defect_type.replaceAll("_", " ")} near {finding.location_hint || "the selected panel area"}.</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm leading-6 text-[#4d554b]">
+            {result
+              ? "Nenhuma anomalia detectada - inspecao concluida sem achados."
+              : selectedSample?.summary ?? "Run an inspection to create a validated result."}
+          </p>
+        )}
+      </div>
+
+      <div className="border-b border-[#deddd6] p-4">
+        <h3 className="text-sm font-semibold">Evidence</h3>
+        <p className="mt-2 text-sm leading-5 text-[#687066]">
+          {primaryFinding?.visual_evidence ??
+            (result
+              ? "A imagem analisada nao retornou achados de anomalia no contrato da API."
+              : selectedSample?.source_label ?? "Evidence will reference the selected image after analysis.")}
+        </p>
+      </div>
+
+      <div className="border-b border-[#deddd6] p-4">
+        <h3 className="text-sm font-semibold">Recommended action</h3>
+        <p className="mt-2 text-sm leading-5 text-[#4d554b]">
+          {primaryFinding?.recommended_action ??
+            (result
+              ? "Manter em revisao humana de rotina e confirmar contra a imagem fonte."
+              : "Run analysis before assigning a maintenance action.")}
+        </p>
+      </div>
+
+      <div className={`border-b p-4 ${result?.human_review_required ?? true ? "border-[#ddb29f] bg-[#fff6ef]" : "border-[#deddd6]"}`}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-[0.12em] text-[#82887f]">Human review</div>
+            <div className="text-xs uppercase tracking-[0.12em] text-[#82887f]">human_review_required</div>
             <div className="mt-1 text-sm font-semibold text-[#171a16]">
-              {result?.human_review_required ?? true ? "Required" : "Not flagged"}
+              {result?.human_review_required ?? true ? "true - human review required" : "false - not flagged"}
             </div>
           </div>
           {(result?.human_review_required ?? true) ? (
@@ -684,44 +815,7 @@ function ResultInspector({
       </div>
 
       <div className="border-b border-[#deddd6] p-4">
-        <h3 className="text-sm font-semibold">Summary</h3>
-        {loading ? (
-          <div className="mt-3 space-y-2">
-            <div className="h-3 animate-pulse rounded-full bg-[#deddd6]" />
-            <div className="h-3 w-4/5 animate-pulse rounded-full bg-[#e7e5dd]" />
-            <div className="h-3 w-3/5 animate-pulse rounded-full bg-[#e7e5dd]" />
-          </div>
-        ) : (
-          <p className="mt-2 text-sm leading-6 text-[#4d554b]">
-            {result?.summary ?? selectedSample?.summary ?? "Run an inspection to create a validated report."}
-          </p>
-        )}
-      </div>
-
-      <div className="border-b border-[#deddd6] p-4">
-        <h3 className="text-sm font-semibold">Findings</h3>
-        {result?.findings.length ? (
-          <div className="mt-3 space-y-3">
-            {result.findings.map((finding) => (
-              <div className="border-t border-[#deddd6] pt-3" key={`${finding.defect_type}-${finding.location_hint}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold capitalize">{finding.defect_type.replaceAll("_", " ")}</div>
-                  <div className="font-mono text-xs text-[#687066]">{formatScore(finding.confidence)}</div>
-                </div>
-                <p className="mt-2 text-sm leading-5 text-[#687066]">{finding.visual_evidence}</p>
-                <p className="mt-2 text-xs leading-5 text-[#4d554b]">{finding.recommended_action}</p>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-3 rounded-[8px] border border-[#deddd6] bg-white p-3 text-sm leading-5 text-[#687066]">
-            {result ? "No defect findings were returned by this run." : "No analysis result yet."}
-          </div>
-        )}
-      </div>
-
-      <div className="border-b border-[#deddd6] p-4">
-        <h3 className="text-sm font-semibold">Model and compute</h3>
+        <h3 className="text-sm font-semibold">Trace</h3>
         <div className="mt-3 space-y-3 text-sm">
           <TraceRow icon={<Cpu size={17} weight="duotone" />} label="Model" value={result?.model_name ?? "pending"} />
           <TraceRow icon={<Stack size={17} weight="duotone" />} label="Job" value={inspectionJob?.job_id ?? "not created"} />
@@ -733,21 +827,29 @@ function ResultInspector({
       </div>
 
       <div className="p-4">
-        <div className="grid grid-cols-2 gap-2">
+        <details className="rounded-[7px] border border-[#deddd6] bg-white p-3" open={Boolean(analysis?.report_markdown)}>
+          <summary className="cursor-pointer text-sm font-semibold text-[#171a16]">Report preview</summary>
+          <pre className="mt-3 max-h-52 overflow-auto whitespace-pre-wrap text-xs leading-5 text-[#4d554b]">
+            {analysis?.report_markdown ?? "Report appears here after analysis."}
+          </pre>
+        </details>
+        <div className="mt-3 grid grid-cols-2 gap-2">
           <button
             className="inline-flex items-center justify-center gap-2 rounded-[7px] bg-[#1d6f43] px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-[#185f39] active:translate-y-[1px] disabled:cursor-not-allowed disabled:bg-[#9aaa9d]"
-            disabled={!analysis?.report_markdown}
+            disabled={!analysis || !inspectionJob}
+            onClick={downloadReportJson}
             type="button"
           >
             <FileArrowDown size={17} weight="duotone" />
-            Export
+            Download JSON report
           </button>
           <button
             className="inline-flex items-center justify-center gap-2 rounded-[7px] border border-[#d8d6cd] bg-white px-3 py-2.5 text-sm font-medium text-[#171a16] transition hover:border-[#171a16] active:translate-y-[1px]"
+            disabled={!result}
             type="button"
           >
             <FileText size={17} weight="duotone" />
-            Task
+            Create review task
           </button>
         </div>
       </div>
@@ -755,11 +857,86 @@ function ResultInspector({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function JobStateBanner({ state }: { state: WorkspaceJobState }) {
+  const stateConfig: Record<
+    WorkspaceJobState,
+    {
+      label: string;
+      detail: string;
+      icon: React.ReactNode;
+      className: string;
+    }
+  > = {
+    idle: {
+      label: "No job started",
+      detail: "Select a sample or upload an image, then run analysis.",
+      icon: <ClipboardText size={18} weight="duotone" />,
+      className: "border-[#deddd6] bg-white text-[#4d554b]"
+    },
+    loading: {
+      label: "Loading workspace",
+      detail: "Connecting to the Orvex API and loading samples.",
+      icon: <CircleNotch className="animate-spin" size={18} weight="duotone" />,
+      className: "border-[#b8cde0] bg-[#edf5fb] text-[#24506f]"
+    },
+    error: {
+      label: "API or network error",
+      detail: "The request did not complete. Check the API service and retry.",
+      icon: <XCircle size={18} weight="duotone" />,
+      className: "border-[#ddb29f] bg-[#f8ebe4] text-[#8c3920]"
+    },
+    queued: {
+      label: "Job queued",
+      detail: "The selected image has been submitted for inspection.",
+      icon: <HourglassMedium size={18} weight="duotone" />,
+      className: "border-[#dbc58d] bg-[#f7f0de] text-[#7a5714]"
+    },
+    processing: {
+      label: "Job processing",
+      detail: "The inspection result is being generated.",
+      icon: <CircleNotch className="animate-spin" size={18} weight="duotone" />,
+      className: "border-[#b8cde0] bg-[#edf5fb] text-[#24506f]"
+    },
+    completed: {
+      label: "Job completed",
+      detail: "Review the provisional result and report below.",
+      icon: <CheckCircle size={18} weight="duotone" />,
+      className: "border-[#b7d7c2] bg-[#e9f4ed] text-[#256d3f]"
+    },
+    failed: {
+      label: "Job failed",
+      detail: "The API returned a failed inspection job.",
+      icon: <XCircle size={18} weight="duotone" />,
+      className: "border-[#ddb29f] bg-[#f8ebe4] text-[#8c3920]"
+    },
+    unsupported: {
+      label: "Input unsupported",
+      detail: "This workflow currently accepts still images only.",
+      icon: <WarningOctagon size={18} weight="duotone" />,
+      className: "border-[#ddb29f] bg-[#f8ebe4] text-[#8c3920]"
+    }
+  };
+  const config = stateConfig[state];
+
+  return (
+    <div className={`border-b p-4 ${config.className}`}>
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 shrink-0">{config.icon}</span>
+        <div>
+          <div className="text-sm font-semibold">{config.label}</div>
+          <div className="mt-1 text-xs leading-5 opacity-85">{config.detail}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Metric({ label, value, suffix }: { label: string; value: string; suffix?: string }) {
   return (
     <div className="border-r border-[#deddd6] p-4 last:border-r-0">
       <div className="text-xs uppercase tracking-[0.12em] text-[#82887f]">{label}</div>
       <div className="mt-2 font-mono text-2xl text-[#171a16]">{value}</div>
+      {suffix ? <div className="mt-1 text-[11px] uppercase tracking-[0.1em] text-[#82887f]">{suffix}</div> : null}
     </div>
   );
 }

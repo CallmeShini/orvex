@@ -12,6 +12,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from app.api.ai_service import AiServiceError, OrvexAIService  # noqa: E402
+from app.api.structured_events import append_structured_event  # noqa: E402
 from app.ml.runtime_evidence import collect_runtime_evidence, write_runtime_evidence  # noqa: E402
 from app.ml.video_pipeline import (  # noqa: E402
     DEFAULT_MAX_FRAMES,
@@ -55,18 +56,48 @@ def inspect_frames(
     frames: list[ExtractedFrame],
     service: OrvexAIService,
     continue_on_error: bool,
+    events_path: Path | None = None,
 ) -> list[FrameInspection]:
     inspections: list[FrameInspection] = []
     for frame in frames:
         try:
             result = service.analyze_image(filename=frame.path.name, image_path=frame.path)
             inspections.append(FrameInspection(frame=frame, result=result))
+            if events_path is not None:
+                log_frame_analyzed(events_path=events_path, frame=frame, result=result)
         except AiServiceError as exc:
+            if events_path is not None:
+                log_frame_analyzed(events_path=events_path, frame=frame, error_type=type(exc).__name__)
             if not continue_on_error:
                 raise
             result = service.inconclusive_result(raw_output=str(exc))
             inspections.append(FrameInspection(frame=frame, result=result, error=str(exc)))
     return inspections
+
+
+def log_frame_analyzed(
+    *,
+    events_path: Path,
+    frame: ExtractedFrame,
+    result: Any | None = None,
+    error_type: str | None = None,
+) -> None:
+    append_structured_event(
+        events_path,
+        event="frame_analyzed",
+        frame_index=frame.frame_index,
+        timestamp_ms=frame.timestamp_ms,
+        frame_sha256=frame.sha256,
+        status="failed" if error_type else "completed",
+        error_type=error_type,
+        inspection_id=result.inspection_id if result else None,
+        model_mode=result.model_mode if result else None,
+        model_name=result.model_name if result else None,
+        latency_ms=result.latency_ms if result else None,
+        priority=result.priority.value if result else None,
+        findings_count=len(result.findings) if result else None,
+        human_review_required=result.human_review_required if result else None,
+    )
 
 
 def run_metadata(args: argparse.Namespace, frames: list[ExtractedFrame]) -> dict[str, Any]:
@@ -91,6 +122,7 @@ def main() -> None:
     manifest_path = output_dir / "frames_manifest.json"
     evaluation_path = output_dir / "video_evaluation.json"
     evidence_path = output_dir / "runtime_evidence.json"
+    events_path = output_dir / "events.jsonl"
 
     if evaluation_path.exists() and not args.force:
         raise FileExistsError(f"Output already exists: {evaluation_path}. Use --force to replace it.")
@@ -110,12 +142,21 @@ def main() -> None:
         fps=args.sample_fps,
         max_frames=args.max_frames,
     )
+    append_structured_event(
+        events_path,
+        event="video_frames_extracted",
+        frame_count=len(frames),
+        sample_fps=args.sample_fps,
+        max_frames=args.max_frames,
+        source_video_sha256=None,
+    )
 
     service = OrvexAIService(mode=args.ai_mode)
     inspections = inspect_frames(
         frames=frames,
         service=service,
         continue_on_error=args.continue_on_error,
+        events_path=events_path,
     )
     payload = video_evaluation_payload(
         source_video=video_path,

@@ -13,6 +13,7 @@ node_modules/
 .next/
 out/
 *.tsbuildinfo
+docs/
 *.ckpt
 *.onnx
 *.pt

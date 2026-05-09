@@ -164,6 +164,23 @@ curl http://127.0.0.1:8000/health
 curl http://127.0.0.1:8000/samples
 ```
 
+## Validação Local
+
+```bash
+git check-ignore -v .tmp/ .pytest-basetemp-current
+.venv\Scripts\python.exe -m pytest -q
+git status --short
+```
+
+Use .venv\Scripts\python.exe -m pytest -q em vez de python -m pytest -q pois o Python global pode apontar para executável inválido.
+
+Se o pytest falhar com `PermissionError` ao limpar `.tmp/pytest-basetemp` ou `.pytest-basetemp-current`, remova esses diretórios temporários e rode o pytest novamente:
+
+```powershell
+Remove-Item -Recurse -Force .tmp\pytest-basetemp, .pytest-basetemp-current -ErrorAction SilentlyContinue
+.venv\Scripts\python.exe -m pytest -q
+```
+
 ## Demo Boundary
 
 Mock mode is intentionally transparent. It exists so the user flow, report generation, JSON contract, and presentation can be validated before using MI300X inference.

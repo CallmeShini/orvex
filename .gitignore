@@ -4,7 +4,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tmp/
+.pytest-basetemp*
 .venv/
+venv/
 .env
 node_modules/
 .next/

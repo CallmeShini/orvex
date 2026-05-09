@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.api.job_service import InspectionJobService
 from app.api.main import app
+from app.api.structured_events import load_structured_events
 
 
 def test_create_and_fetch_sample_inspection_job(tmp_path: Path, monkeypatch) -> None:
@@ -26,6 +27,10 @@ def test_create_and_fetch_sample_inspection_job(tmp_path: Path, monkeypatch) -> 
     assert "Orvex Inspection Report" in payload["report_markdown"]
     assert (tmp_path / payload["job_id"] / "job.json").exists()
     assert (tmp_path / payload["job_id"] / "results" / f"{payload['result']['inspection_id']}.json").exists()
+    events = load_structured_events(tmp_path / payload["job_id"] / "events.jsonl")
+    assert [event["event"] for event in events] == ["job_created", "job_completed"]
+    assert events[-1]["model_mode"] == payload["result"]["model_mode"]
+    assert events[-1]["latency_ms"] == payload["result"]["latency_ms"]
 
     fetch_response = client.get(f"/inspection-jobs/{payload['job_id']}")
 
@@ -52,6 +57,13 @@ def test_create_image_job_stores_asset_inside_job_directory(tmp_path: Path, monk
     assert asset["size_bytes"] == len(b"fake image bytes")
     assert len(asset["sha256"]) == 64
     assert (tmp_path / payload["job_id"] / asset["storage_path"]).exists()
+    events = load_structured_events(tmp_path / payload["job_id"] / "events.jsonl")
+    assert [event["event"] for event in events] == ["job_created", "asset_saved", "job_completed"]
+    asset_event = events[1]
+    assert asset_event["asset_id"] == asset["asset_id"]
+    assert asset_event["size_bytes"] == len(b"fake image bytes")
+    assert asset_event["sha256"] == asset["sha256"]
+    assert "filename" not in asset_event
 
 
 def test_create_inspection_job_requires_input(tmp_path: Path, monkeypatch) -> None:
